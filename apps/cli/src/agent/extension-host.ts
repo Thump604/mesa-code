@@ -70,6 +70,7 @@ export interface ExtensionHostOptions {
 	user: User | null
 	provider: SupportedProvider
 	apiKey?: string
+	baseUrl?: string
 	model: string
 	workspacePath: string
 	extensionPath: string
@@ -112,6 +113,7 @@ export interface ExtensionHostInterface extends IExtensionHost<ExtensionHostEven
 	runTask(prompt: string, taskId?: string, configuration?: RooCodeSettings, images?: string[]): Promise<void>
 	resumeTask(taskId: string): Promise<void>
 	sendToExtension(message: WebviewMessage): void
+	getRuntimeOptions(): Pick<ExtensionHostOptions, "provider" | "apiKey" | "baseUrl">
 	dispose(): Promise<void>
 }
 
@@ -227,7 +229,9 @@ export class ExtensionHost extends EventEmitter implements ExtensionHostInterfac
 			experiments: {
 				customTools: true,
 			},
-			...getProviderSettings(this.options.provider, this.options.apiKey, this.options.model),
+			...getProviderSettings(this.options.provider, this.options.apiKey, this.options.model, {
+				baseUrl: this.options.baseUrl,
+			}),
 		}
 
 		this.initialSettings = this.options.nonInteractive
@@ -262,6 +266,14 @@ export class ExtensionHost extends EventEmitter implements ExtensionHostInterfac
 		if (this.options.terminalShell) {
 			this.initialSettings.terminalShellIntegrationDisabled = true
 			this.initialSettings.execaShellPath = this.options.terminalShell
+		}
+	}
+
+	getRuntimeOptions(): Pick<ExtensionHostOptions, "provider" | "apiKey" | "baseUrl"> {
+		return {
+			provider: this.options.provider,
+			apiKey: this.options.apiKey,
+			baseUrl: this.options.baseUrl,
 		}
 	}
 

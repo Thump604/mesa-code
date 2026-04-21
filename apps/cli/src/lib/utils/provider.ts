@@ -4,6 +4,7 @@ import type { SupportedProvider } from "@/types/index.js"
 
 const envVarMap: Record<SupportedProvider, string> = {
 	anthropic: "ANTHROPIC_API_KEY",
+	openai: "OPENAI_API_KEY",
 	"openai-native": "OPENAI_API_KEY",
 	gemini: "GOOGLE_API_KEY",
 	openrouter: "OPENROUTER_API_KEY",
@@ -24,6 +25,7 @@ export function getProviderSettings(
 	provider: SupportedProvider,
 	apiKey: string | undefined,
 	model: string | undefined,
+	options: { baseUrl?: string } = {},
 ): RooCodeSettings {
 	const config: RooCodeSettings = { apiProvider: provider }
 
@@ -32,9 +34,15 @@ export function getProviderSettings(
 			if (apiKey) config.apiKey = apiKey
 			if (model) config.apiModelId = model
 			break
+		case "openai":
+			if (apiKey) config.openAiApiKey = apiKey
+			if (model) config.openAiModelId = model
+			if (options.baseUrl) config.openAiBaseUrl = options.baseUrl
+			break
 		case "openai-native":
 			if (apiKey) config.openAiNativeApiKey = apiKey
 			if (model) config.apiModelId = model
+			if (options.baseUrl) config.openAiNativeBaseUrl = options.baseUrl
 			break
 		case "gemini":
 			if (apiKey) config.geminiApiKey = apiKey

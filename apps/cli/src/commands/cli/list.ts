@@ -10,10 +10,17 @@ import { getProviderDefaultModelId } from "@roo-code/types"
 
 import { ExtensionHost, type ExtensionHostOptions } from "@/agent/index.js"
 import { readWorkspaceTaskSessions } from "@/lib/task-history/index.js"
-import { loadToken } from "@/lib/storage/index.js"
+import { loadSettings, loadToken } from "@/lib/storage/index.js"
 import { getDefaultExtensionPath } from "@/lib/utils/extension.js"
 import { getApiKeyFromEnv } from "@/lib/utils/provider.js"
 import { isRecord } from "@/lib/utils/guards.js"
+import {
+	resolveConfiguredApiKey,
+	resolveConfiguredBaseUrl,
+	resolveEffectiveModel,
+	resolveEffectiveProvider,
+} from "@/lib/utils/runtime-config.js"
+import type { SupportedProvider } from "@/types/index.js"
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -25,6 +32,8 @@ type BaseListOptions = {
 	workspace?: string
 	extension?: string
 	apiKey?: string
+	provider?: SupportedProvider
+	baseUrl?: string
 	format?: string
 	debug?: boolean
 }
@@ -106,15 +115,23 @@ function outputSessionsText(sessions: SessionLike[]): void {
 async function createListHost(options: BaseListOptions, hostOptions: ListHostOptions): Promise<ExtensionHost> {
 	const workspacePath = resolveWorkspacePath(options.workspace)
 	const extensionPath = resolveExtensionPath(options.extension)
-	const apiKey = options.apiKey || (await loadToken()) || getApiKeyFromEnv("roo")
+	const rooToken = await loadToken()
+	const settings = await loadSettings()
+	const provider = resolveEffectiveProvider(options.provider, settings, Boolean(rooToken))
+	const baseUrl = resolveConfiguredBaseUrl(options.baseUrl, settings)
+	const model = resolveEffectiveModel(undefined, settings, provider) || getProviderDefaultModelId(provider)
+	const apiKey =
+		(provider === "roo" ? rooToken : undefined) ||
+		resolveConfiguredApiKey(provider, options.apiKey, settings, getApiKeyFromEnv(provider), baseUrl)
 
 	const extensionHostOptions: ExtensionHostOptions = {
 		mode: "code",
 		reasoningEffort: undefined,
 		user: null,
-		provider: "roo",
-		model: getProviderDefaultModelId("roo"),
+		provider,
+		model,
 		apiKey,
+		baseUrl,
 		workspacePath,
 		extensionPath,
 		nonInteractive: true,
@@ -145,11 +162,12 @@ async function createListHost(options: BaseListOptions, hostOptions: ListHostOpt
  */
 function requestFromExtension<T>(
 	host: ExtensionHost,
-	requestType: WebviewMessage["type"],
+	requestMessage: WebviewMessage,
 	extract: (message: Record<string, unknown>) => T | undefined,
 ): Promise<T> {
 	return new Promise<T>((resolve, reject) => {
 		let settled = false
+		const requestType = requestMessage.type
 
 		const cleanup = () => {
 			clearTimeout(timeoutId)
@@ -193,12 +211,12 @@ function requestFromExtension<T>(
 		}, REQUEST_TIMEOUT_MS)
 
 		host.on("extensionWebviewMessage", onMessage)
-		host.sendToExtension({ type: requestType })
+		host.sendToExtension(requestMessage)
 	})
 }
 
 function requestCommands(host: ExtensionHost): Promise<CommandLike[]> {
-	return requestFromExtension(host, "requestCommands", (message) => {
+	return requestFromExtension(host, { type: "requestCommands" }, (message) => {
 		if (message.type !== "commands") {
 			return undefined
 		}
@@ -207,7 +225,7 @@ function requestCommands(host: ExtensionHost): Promise<CommandLike[]> {
 }
 
 function requestModes(host: ExtensionHost): Promise<ModeLike[]> {
-	return requestFromExtension(host, "requestModes", (message) => {
+	return requestFromExtension(host, { type: "requestModes" }, (message) => {
 		if (message.type !== "modes") {
 			return undefined
 		}
@@ -215,8 +233,20 @@ function requestModes(host: ExtensionHost): Promise<ModeLike[]> {
 	})
 }
 
+function requestRouterModels(host: ExtensionHost, provider: "openrouter" | "vercel-ai-gateway"): Promise<ModelRecord> {
+	return requestFromExtension(host, { type: "requestRouterModels", values: { provider } }, (message) => {
+		if (message.type !== "routerModels") {
+			return undefined
+		}
+
+		const routerModels = isRecord(message.routerModels) ? message.routerModels : undefined
+		const providerModels = routerModels?.[provider]
+		return isRecord(providerModels) ? (providerModels as ModelRecord) : {}
+	})
+}
+
 function requestRooModels(host: ExtensionHost): Promise<ModelRecord> {
-	return requestFromExtension(host, "requestRooModels", (message) => {
+	return requestFromExtension(host, { type: "requestRooModels" }, (message) => {
 		if (message.type !== "singleRouterModelFetchResponse") {
 			return undefined
 		}
@@ -235,6 +265,16 @@ function requestRooModels(host: ExtensionHost): Promise<ModelRecord> {
 		}
 
 		return isRecord(values.models) ? (values.models as ModelRecord) : {}
+	})
+}
+
+function requestOpenAiModels(host: ExtensionHost, baseUrl: string, apiKey: string): Promise<ModelRecord> {
+	return requestFromExtension(host, { type: "requestOpenAiModels", values: { baseUrl, apiKey } }, (message) => {
+		if (message.type !== "openAiModels") {
+			return undefined
+		}
+
+		return isRecord(message.openAiModels) ? (message.openAiModels as ModelRecord) : {}
 	})
 }
 
@@ -299,7 +339,22 @@ export async function listModels(options: BaseListOptions): Promise<void> {
 	const format = parseFormat(options.format)
 
 	await withHostAndSignalHandlers(options, { ephemeral: true }, async (host) => {
-		const models = await requestRooModels(host)
+		let models: ModelRecord
+		const { provider, baseUrl, apiKey } = host.getRuntimeOptions()
+
+		if (provider === "openai") {
+			if (!apiKey) {
+				throw new Error("OpenAI-compatible model listing requires an API key or local placeholder resolution")
+			}
+
+			models = await requestOpenAiModels(host, baseUrl ?? "https://api.openai.com/v1", apiKey)
+		} else if (provider === "openrouter" || provider === "vercel-ai-gateway") {
+			models = await requestRouterModels(host, provider)
+		} else if (provider === "roo") {
+			models = await requestRooModels(host)
+		} else {
+			throw new Error(`Model listing is not yet supported for provider: ${provider}`)
+		}
 
 		if (format === "json") {
 			outputJson({ models })

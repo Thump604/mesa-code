@@ -3,6 +3,7 @@ import type { OutputFormat } from "./json-events.js"
 
 export const supportedProviders = [
 	"anthropic",
+	"openai",
 	"openai-native",
 	"gemini",
 	"openrouter",
@@ -33,6 +34,7 @@ export type FlagOptions = {
 	exitOnError: boolean
 	apiKey?: string
 	provider?: SupportedProvider
+	baseUrl?: string
 	model?: string
 	mode?: string
 	terminalShell?: string
@@ -72,4 +74,12 @@ export interface CliSettings {
 	dangerouslySkipPermissions?: boolean
 	/** Exit upon task completion */
 	oneshot?: boolean
+	/** Generic OpenAI-compatible base URL for local/private setups */
+	baseUrl?: string
+	/** Generic API key override for local/private setups */
+	apiKey?: string
+	/** Legacy imported OpenAI-compatible settings retained for migration */
+	openAiBaseUrl?: string
+	openAiApiKey?: string
+	openAiModelId?: string
 }

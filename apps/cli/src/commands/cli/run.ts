@@ -25,6 +25,12 @@ import { loadToken, loadSettings } from "@/lib/storage/index.js"
 import { readWorkspaceTaskSessions, resolveWorkspaceResumeSessionId } from "@/lib/task-history/index.js"
 import { isRecord } from "@/lib/utils/guards.js"
 import { getEnvVarName, getApiKeyFromEnv } from "@/lib/utils/provider.js"
+import {
+	resolveConfiguredApiKey,
+	resolveConfiguredBaseUrl,
+	resolveEffectiveModel,
+	resolveEffectiveProvider,
+} from "@/lib/utils/runtime-config.js"
 import { runOnboarding } from "@/lib/utils/onboarding.js"
 import { validateTerminalShellPath } from "@/lib/utils/shell.js"
 import { getDefaultExtensionPath } from "@/lib/utils/extension.js"
@@ -174,14 +180,16 @@ export async function run(promptArg: string | undefined, flagOptions: FlagOption
 
 	const isTuiSupported = process.stdin.isTTY && process.stdout.isTTY
 	const isTuiEnabled = !flagOptions.print && isTuiSupported
-	const isOnboardingEnabled = isTuiEnabled && !rooToken && !flagOptions.provider && !settings.provider
 
 	// Determine effective values: CLI flags > settings file > DEFAULT_FLAGS.
 	const effectiveMode = flagOptions.mode || settings.mode || DEFAULT_FLAGS.mode
-	const effectiveModel = flagOptions.model || settings.model || DEFAULT_FLAGS.model
+	const effectiveProvider = resolveEffectiveProvider(flagOptions.provider, settings, Boolean(rooToken))
+	const effectiveBaseUrl = resolveConfiguredBaseUrl(flagOptions.baseUrl, settings)
+	const effectiveModel = resolveEffectiveModel(flagOptions.model, settings, effectiveProvider)
+	const isOnboardingEnabled =
+		isTuiEnabled && !rooToken && !flagOptions.provider && !settings.provider && effectiveProvider === "openrouter"
 	const effectiveReasoningEffort =
 		flagOptions.reasoningEffort || settings.reasoningEffort || DEFAULT_FLAGS.reasoningEffort
-	const effectiveProvider = flagOptions.provider ?? settings.provider ?? (rooToken ? "roo" : "openrouter")
 	const effectiveWorkspacePath = flagOptions.workspace ? path.resolve(flagOptions.workspace) : process.cwd()
 	const legacyRequireApprovalFromSettings =
 		settings.requireApproval ??
@@ -219,6 +227,7 @@ export async function run(promptArg: string | undefined, flagOptions: FlagOption
 		user: null,
 		provider: effectiveProvider,
 		model: effectiveModel,
+		baseUrl: effectiveBaseUrl,
 		workspacePath: effectiveWorkspacePath,
 		extensionPath: path.resolve(flagOptions.extension || getDefaultExtensionPath(__dirname)),
 		nonInteractive: !effectiveRequireApproval,
@@ -284,7 +293,20 @@ export async function run(promptArg: string | undefined, flagOptions: FlagOption
 	}
 
 	extensionHostOptions.apiKey =
-		extensionHostOptions.apiKey || flagOptions.apiKey || getApiKeyFromEnv(extensionHostOptions.provider)
+		extensionHostOptions.apiKey ||
+		resolveConfiguredApiKey(
+			extensionHostOptions.provider,
+			flagOptions.apiKey,
+			settings,
+			getApiKeyFromEnv(extensionHostOptions.provider),
+			extensionHostOptions.baseUrl,
+		)
+
+	if (extensionHostOptions.provider === "openai" && !extensionHostOptions.model) {
+		console.error("[CLI] Error: No model provided for the openai provider.")
+		console.error("[CLI] Use --model, set model in cli-settings.json, or configure openAiModelId.")
+		process.exit(1)
+	}
 
 	if (!extensionHostOptions.apiKey) {
 		if (extensionHostOptions.provider === "roo") {

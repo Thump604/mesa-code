@@ -1,4 +1,4 @@
-import { getApiKeyFromEnv } from "../provider.js"
+import { getApiKeyFromEnv, getProviderSettings } from "../provider.js"
 
 describe("getApiKeyFromEnv", () => {
 	const originalEnv = process.env
@@ -24,11 +24,25 @@ describe("getApiKeyFromEnv", () => {
 
 	it("should return API key from environment variable for openai", () => {
 		process.env.OPENAI_API_KEY = "test-openai-key"
+		expect(getApiKeyFromEnv("openai")).toBe("test-openai-key")
 		expect(getApiKeyFromEnv("openai-native")).toBe("test-openai-key")
 	})
 
 	it("should return undefined when API key is not set", () => {
 		delete process.env.ANTHROPIC_API_KEY
 		expect(getApiKeyFromEnv("anthropic")).toBeUndefined()
+	})
+})
+
+describe("getProviderSettings", () => {
+	it("maps openai-compatible settings correctly", () => {
+		expect(
+			getProviderSettings("openai", "sk-local", "qwen3.5-27b", { baseUrl: "http://127.0.0.1:8080/v1" }),
+		).toMatchObject({
+			apiProvider: "openai",
+			openAiApiKey: "sk-local",
+			openAiModelId: "qwen3.5-27b",
+			openAiBaseUrl: "http://127.0.0.1:8080/v1",
+		})
 	})
 })

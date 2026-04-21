@@ -76,6 +76,21 @@ describe("Settings Storage", () => {
 			const loaded = await loadSettings()
 			expect(loaded).toEqual(settingsData)
 		})
+
+		it("should preserve imported openai-compatible settings fields", async () => {
+			const settingsData = {
+				provider: "openai" as const,
+				openAiBaseUrl: "http://127.0.0.1:8080/v1",
+				openAiApiKey: "sk-local",
+				openAiModelId: "qwen3.5-27b",
+			}
+
+			await fs.mkdir(actualTestConfigDir, { recursive: true })
+			await fs.writeFile(expectedSettingsFile, JSON.stringify(settingsData), "utf-8")
+
+			const loaded = await loadSettings()
+			expect(loaded).toEqual(settingsData)
+		})
 	})
 
 	describe("saveSettings", () => {
