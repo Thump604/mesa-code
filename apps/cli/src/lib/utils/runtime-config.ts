@@ -1,19 +1,38 @@
 import { DEFAULT_FLAGS } from "@/types/constants.js"
-import type { CliSettings, SupportedProvider } from "@/types/index.js"
+import type { CliSettings, SupportedApiStandard, SupportedLocalRuntime, SupportedProvider } from "@/types/index.js"
 
-function getSettingsBaseUrl(settings: CliSettings): string | undefined {
-	return settings.baseUrl ?? settings.openAiBaseUrl
+function getProtocolBaseUrlEnvVar(protocol: SupportedApiStandard): string | undefined {
+	return protocol === "anthropic" ? process.env.ANTHROPIC_BASE_URL : process.env.OPENAI_BASE_URL
 }
 
-function getSettingsApiKey(settings: CliSettings): string | undefined {
-	return settings.apiKey ?? settings.openAiApiKey
+function getSettingsBaseUrl(settings: CliSettings, protocol: SupportedApiStandard): string | undefined {
+	if (settings.baseUrl) {
+		return settings.baseUrl
+	}
+
+	return protocol === "anthropic" ? settings.anthropicBaseUrl : settings.openAiBaseUrl
 }
 
-function hasConfiguredOpenAiCompatSettings(settings: CliSettings): boolean {
-	return Boolean(getSettingsBaseUrl(settings) || getSettingsApiKey(settings) || settings.openAiModelId)
+function getSettingsApiKey(settings: CliSettings, protocol: SupportedApiStandard): string | undefined {
+	if (settings.apiKey) {
+		return settings.apiKey
+	}
+
+	return protocol === "openai" ? settings.openAiApiKey : undefined
 }
 
-export function isLocalOpenAiBaseUrl(baseUrl: string | undefined): boolean {
+function hasConfiguredProtocolSettings(
+	settings: CliSettings,
+	protocol: SupportedApiStandard,
+	runtime: SupportedLocalRuntime | undefined,
+): boolean {
+	const configuredModel = protocol === "openai" ? (settings.openAiModelId ?? settings.model) : settings.model
+	return Boolean(
+		runtime || getSettingsBaseUrl(settings, protocol) || getSettingsApiKey(settings, protocol) || configuredModel,
+	)
+}
+
+export function isLocalBaseUrl(baseUrl: string | undefined): boolean {
 	if (!baseUrl) {
 		return false
 	}
@@ -26,14 +45,57 @@ export function isLocalOpenAiBaseUrl(baseUrl: string | undefined): boolean {
 	}
 }
 
-export function resolveConfiguredBaseUrl(flagBaseUrl: string | undefined, settings: CliSettings): string | undefined {
-	return flagBaseUrl ?? getSettingsBaseUrl(settings) ?? process.env.OPENAI_BASE_URL
+export const isLocalOpenAiBaseUrl = isLocalBaseUrl
+
+export function resolveEffectiveProtocol(
+	flagProtocol: SupportedApiStandard | undefined,
+	flagProvider: SupportedProvider | undefined,
+	settings: CliSettings,
+): SupportedApiStandard {
+	if (flagProvider === "anthropic") {
+		return "anthropic"
+	}
+
+	if (flagProvider === "openai") {
+		return "openai"
+	}
+
+	if (flagProtocol) {
+		return flagProtocol
+	}
+
+	if (settings.provider === "anthropic") {
+		return "anthropic"
+	}
+
+	if (settings.provider === "openai") {
+		return "openai"
+	}
+
+	return settings.protocol ?? "openai"
+}
+
+export function resolveEffectiveRuntime(
+	flagRuntime: SupportedLocalRuntime | undefined,
+	settings: CliSettings,
+): SupportedLocalRuntime | undefined {
+	return flagRuntime ?? settings.runtime
+}
+
+export function resolveConfiguredBaseUrl(
+	flagBaseUrl: string | undefined,
+	settings: CliSettings,
+	protocol: SupportedApiStandard,
+): string | undefined {
+	return flagBaseUrl ?? getSettingsBaseUrl(settings, protocol) ?? getProtocolBaseUrlEnvVar(protocol)
 }
 
 export function resolveEffectiveProvider(
 	flagProvider: SupportedProvider | undefined,
 	settings: CliSettings,
 	rooTokenAvailable: boolean,
+	protocol: SupportedApiStandard,
+	runtime: SupportedLocalRuntime | undefined,
 ): SupportedProvider {
 	if (flagProvider) {
 		return flagProvider
@@ -43,8 +105,8 @@ export function resolveEffectiveProvider(
 		return settings.provider
 	}
 
-	if (hasConfiguredOpenAiCompatSettings(settings) || process.env.OPENAI_BASE_URL) {
-		return "openai"
+	if (hasConfiguredProtocolSettings(settings, protocol, runtime) || getProtocolBaseUrlEnvVar(protocol)) {
+		return protocol === "anthropic" ? "anthropic" : "openai"
 	}
 
 	return rooTokenAvailable ? "roo" : "openrouter"
@@ -54,13 +116,28 @@ export function resolveEffectiveModel(
 	flagModel: string | undefined,
 	settings: CliSettings,
 	provider: SupportedProvider,
+	baseUrl: string | undefined,
+	runtime: SupportedLocalRuntime | undefined,
 ): string {
+	const isImplicitDefaultModel = flagModel === DEFAULT_FLAGS.model
+	const shouldForceExplicitLocalModel = isImplicitDefaultModel && Boolean(baseUrl || runtime)
+
 	if (flagModel) {
+		if ((provider === "openai" || provider === "anthropic") && shouldForceExplicitLocalModel) {
+			// The commander default is a hosted Anthropic model ID, which is the wrong
+			// contract for local/private runtime profiles.
+			return ""
+		}
+
 		return flagModel
 	}
 
 	if (provider === "openai") {
 		return settings.openAiModelId ?? settings.model ?? ""
+	}
+
+	if (provider === "anthropic") {
+		return settings.model ?? ""
 	}
 
 	return settings.model ?? DEFAULT_FLAGS.model
@@ -73,13 +150,14 @@ export function resolveConfiguredApiKey(
 	envApiKey: string | undefined,
 	baseUrl: string | undefined,
 ): string | undefined {
-	if (provider === "openai") {
-		const resolved = flagApiKey ?? getSettingsApiKey(settings) ?? envApiKey
+	if (provider === "openai" || provider === "anthropic") {
+		const protocol = provider === "anthropic" ? "anthropic" : "openai"
+		const resolved = flagApiKey ?? getSettingsApiKey(settings, protocol) ?? envApiKey
 		if (resolved) {
 			return resolved
 		}
 
-		if (isLocalOpenAiBaseUrl(baseUrl)) {
+		if (isLocalBaseUrl(baseUrl)) {
 			return "not-needed"
 		}
 

@@ -17,6 +17,22 @@ export function isSupportedProvider(provider: string): provider is SupportedProv
 	return supportedProviders.includes(provider as SupportedProvider)
 }
 
+export const supportedApiStandards = ["openai", "anthropic"] as const
+
+export type SupportedApiStandard = (typeof supportedApiStandards)[number]
+
+export function isSupportedApiStandard(protocol: string): protocol is SupportedApiStandard {
+	return supportedApiStandards.includes(protocol as SupportedApiStandard)
+}
+
+export const supportedLocalRuntimes = ["llama.cpp", "vllm-mlx"] as const
+
+export type SupportedLocalRuntime = (typeof supportedLocalRuntimes)[number]
+
+export function isSupportedLocalRuntime(runtime: string): runtime is SupportedLocalRuntime {
+	return supportedLocalRuntimes.includes(runtime as SupportedLocalRuntime)
+}
+
 export type ReasoningEffortFlagOptions = ReasoningEffortExtended | "unspecified" | "disabled"
 
 export type FlagOptions = {
@@ -34,6 +50,8 @@ export type FlagOptions = {
 	exitOnError: boolean
 	apiKey?: string
 	provider?: SupportedProvider
+	protocol?: SupportedApiStandard
+	runtime?: SupportedLocalRuntime
 	baseUrl?: string
 	model?: string
 	mode?: string
@@ -74,12 +92,18 @@ export interface CliSettings {
 	dangerouslySkipPermissions?: boolean
 	/** Exit upon task completion */
 	oneshot?: boolean
-	/** Generic OpenAI-compatible base URL for local/private setups */
+	/** Protocol-aware base URL for local/private setups */
 	baseUrl?: string
-	/** Generic API key override for local/private setups */
+	/** Protocol-aware API key override for local/private setups */
 	apiKey?: string
+	/** Selected API standard for generic local/private runtimes */
+	protocol?: SupportedApiStandard
+	/** Selected local runtime profile */
+	runtime?: SupportedLocalRuntime
 	/** Legacy imported OpenAI-compatible settings retained for migration */
 	openAiBaseUrl?: string
 	openAiApiKey?: string
 	openAiModelId?: string
+	/** Explicit Anthropic-compatible endpoint for local/private setups */
+	anthropicBaseUrl?: string
 }

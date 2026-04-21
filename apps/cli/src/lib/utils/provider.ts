@@ -33,6 +33,7 @@ export function getProviderSettings(
 		case "anthropic":
 			if (apiKey) config.apiKey = apiKey
 			if (model) config.apiModelId = model
+			if (options.baseUrl) config.anthropicBaseUrl = options.baseUrl
 			break
 		case "openai":
 			if (apiKey) config.openAiApiKey = apiKey

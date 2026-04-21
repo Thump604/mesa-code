@@ -80,6 +80,10 @@ If the fork is successful, users should describe it as:
 
 3. Telemetry off by default
    Any analytics must be opt-in and easy to audit.
+   Model-serving telemetry should stay with the local runtime itself. For
+   `llama.cpp` and `vllm-mlx`, the fork should rely on those engines' native
+   metrics/telemetry surfaces instead of inventing duplicate CLI-side model
+   observability.
 
 4. Private configuration is a product feature
    Config, sessions, prompts, modes, and model registries must be easy to keep local.
@@ -132,8 +136,9 @@ Goal: make local/private the default contract.
 - remove Roo router assumptions and hosted provider defaults
 - default provider resolution to local OpenAI-compatible endpoints
 - make telemetry opt-in and auditable
+- keep model-serving observability with the runtime engine, not the CLI
 - support clean config import from Roo local settings
-- add a first-run local setup doctor for Ollama, LM Studio, vLLM, MLX, and OpenAI-compatible APIs
+- add a first-run local setup doctor for Ollama, LM Studio, `llama.cpp`, `vllm-mlx`, and OpenAI-compatible APIs
 
 Exit criteria:
 
@@ -162,11 +167,14 @@ Exit criteria:
 Goal: make local model use better than cloud-native competitors.
 
 - first-class profiles for local backends
+- explicit runtime profiles for `llama.cpp` and `vllm-mlx`
+- support both OpenAI-compatible and Anthropic-compatible local endpoint standards
 - model capability registry with context, reasoning, tool, and vision metadata
 - local presets tuned for common runtimes
 - clear timeout and retry behavior for slow local inference
 - durable streaming and partial-output handling
 - import/export for mode packs, prompts, and model registries
+- surface runtime-native metrics instead of duplicating model-serving telemetry in the fork
 
 Exit criteria:
 

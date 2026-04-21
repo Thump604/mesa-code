@@ -118,6 +118,34 @@ roo --print "Summarize this repository"
 roo --print --create-with-session-id 018f7fc8-7c96-7f7c-98aa-2ec4ff7f6d87 "Summarize this repository"
 ```
 
+### Local Runtime Profiles
+
+For local/private deployments, the CLI can target explicit runtime profiles for
+`llama.cpp` and `vllm-mlx` while speaking either OpenAI-compatible or
+Anthropic-compatible APIs.
+
+```bash
+# OpenAI-compatible vllm-mlx endpoint
+roo \
+  --runtime vllm-mlx \
+  --protocol openai \
+  --base-url http://127.0.0.1:8080/v1 \
+  --model qwen3-coder \
+  "Summarize the repository"
+
+# Anthropic-compatible llama.cpp adapter endpoint
+roo \
+  --runtime llama.cpp \
+  --protocol anthropic \
+  --base-url http://127.0.0.1:8081 \
+  --model claude-local \
+  "Review the staged diff"
+```
+
+The CLI should not own model-serving telemetry for these runtimes. Use the
+metrics and observability surfaces exposed by `llama.cpp` and `vllm-mlx`
+themselves.
+
 ### Stdin Stream Mode (`--stdin-prompt-stream`)
 
 For programmatic control (one process, multiple prompts), use `--stdin-prompt-stream` with `--print`.
@@ -189,6 +217,9 @@ Tokens are valid for 90 days. The CLI will prompt you to re-authenticate when yo
 | `-a, --require-approval`                | Require manual approval before actions execute                                          | `false`                                  |
 | `-k, --api-key <key>`                   | API key for the LLM provider                                                            | From env var                             |
 | `--provider <provider>`                 | API provider (roo, anthropic, openai, openrouter, etc.)                                 | `openrouter` (or `roo` if authenticated) |
+| `--protocol <protocol>`                 | API standard for local/self-hosted endpoints: `openai` or `anthropic`                   | `openai`                                 |
+| `--runtime <runtime>`                   | Local runtime profile: `llama.cpp` or `vllm-mlx`                                        | None                                     |
+| `--base-url <url>`                      | Base URL for OpenAI- or Anthropic-compatible endpoints                                  | None                                     |
 | `-m, --model <model>`                   | Model to use                                                                            | `anthropic/claude-opus-4.6`              |
 | `--mode <mode>`                         | Mode to start in (code, architect, ask, debug, etc.)                                    | `code`                                   |
 | `--terminal-shell <path>`               | Absolute shell path for inline terminal command execution                               | Auto-detected shell                      |
@@ -214,10 +245,18 @@ The CLI will look for API keys in environment variables if not provided via `--a
 | ----------------- | --------------------------- |
 | roo               | `ROO_API_KEY`               |
 | anthropic         | `ANTHROPIC_API_KEY`         |
+| openai            | `OPENAI_API_KEY`            |
 | openai-native     | `OPENAI_API_KEY`            |
 | openrouter        | `OPENROUTER_API_KEY`        |
 | gemini            | `GOOGLE_API_KEY`            |
 | vercel-ai-gateway | `VERCEL_AI_GATEWAY_API_KEY` |
+
+For protocol-aware local/private base URLs, the CLI also reads:
+
+| Standard  | Environment Variable |
+| --------- | -------------------- |
+| anthropic | `ANTHROPIC_BASE_URL` |
+| openai    | `OPENAI_BASE_URL`    |
 
 **Authentication Environment Variables:**
 

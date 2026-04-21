@@ -45,4 +45,15 @@ describe("getProviderSettings", () => {
 			openAiBaseUrl: "http://127.0.0.1:8080/v1",
 		})
 	})
+
+	it("maps anthropic-compatible settings correctly", () => {
+		expect(
+			getProviderSettings("anthropic", "sk-local", "claude-local", { baseUrl: "http://127.0.0.1:8081" }),
+		).toMatchObject({
+			apiProvider: "anthropic",
+			apiKey: "sk-local",
+			apiModelId: "claude-local",
+			anthropicBaseUrl: "http://127.0.0.1:8081",
+		})
+	})
 })

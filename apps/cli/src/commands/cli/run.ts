@@ -9,9 +9,13 @@ import { setLogger } from "@roo-code/vscode-shim"
 
 import {
 	FlagOptions,
+	isSupportedApiStandard,
+	isSupportedLocalRuntime,
 	isSupportedProvider,
 	OnboardingProviderChoice,
 	supportedProviders,
+	supportedApiStandards,
+	supportedLocalRuntimes,
 	DEFAULT_FLAGS,
 	REASONING_EFFORTS,
 	SDK_BASE_URL,
@@ -29,7 +33,9 @@ import {
 	resolveConfiguredApiKey,
 	resolveConfiguredBaseUrl,
 	resolveEffectiveModel,
+	resolveEffectiveProtocol,
 	resolveEffectiveProvider,
+	resolveEffectiveRuntime,
 } from "@/lib/utils/runtime-config.js"
 import { runOnboarding } from "@/lib/utils/onboarding.js"
 import { validateTerminalShellPath } from "@/lib/utils/shell.js"
@@ -45,6 +51,42 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const ROO_MODEL_WARMUP_TIMEOUT_MS = 10_000
 const SIGNAL_ONLY_EXIT_KEEPALIVE_MS = 60_000
 const STREAM_RESUME_WAIT_TIMEOUT_MS = 2_000
+
+function validateProtocolAndRuntime(flagOptions: FlagOptions) {
+	const protocol = flagOptions.protocol
+	if (protocol && !isSupportedApiStandard(protocol)) {
+		console.error(`[CLI] Error: Invalid protocol: ${protocol}; must be one of: ${supportedApiStandards.join(", ")}`)
+		process.exit(1)
+	}
+
+	const runtime = flagOptions.runtime
+	if (runtime && !isSupportedLocalRuntime(runtime)) {
+		console.error(`[CLI] Error: Invalid runtime: ${runtime}; must be one of: ${supportedLocalRuntimes.join(", ")}`)
+		process.exit(1)
+	}
+
+	if (
+		protocol &&
+		flagOptions.provider &&
+		(flagOptions.provider === "openai" || flagOptions.provider === "anthropic") &&
+		flagOptions.provider !== protocol
+	) {
+		console.error(
+			`[CLI] Error: --provider ${flagOptions.provider} conflicts with --protocol ${protocol}; use matching values or omit --provider`,
+		)
+		process.exit(1)
+	}
+
+	if (runtime && flagOptions.provider && !["openai", "anthropic"].includes(flagOptions.provider)) {
+		console.error("[CLI] Error: --runtime only applies to openai/anthropic-compatible endpoint modes")
+		process.exit(1)
+	}
+
+	if (protocol && flagOptions.provider && !["openai", "anthropic"].includes(flagOptions.provider)) {
+		console.error("[CLI] Error: --protocol only applies when using openai/anthropic-compatible endpoint modes")
+		process.exit(1)
+	}
+}
 
 async function bootstrapResumeForStdinStream(host: ExtensionHost, sessionId: string): Promise<void> {
 	host.sendToExtension({ type: "showTaskWithId", text: sessionId })
@@ -123,6 +165,8 @@ export async function run(promptArg: string | undefined, flagOptions: FlagOption
 
 	let prompt = promptArg
 
+	validateProtocolAndRuntime(flagOptions)
+
 	if (flagOptions.promptFile) {
 		if (!fs.existsSync(flagOptions.promptFile)) {
 			console.error(`[CLI] Error: Prompt file does not exist: ${flagOptions.promptFile}`)
@@ -183,9 +227,23 @@ export async function run(promptArg: string | undefined, flagOptions: FlagOption
 
 	// Determine effective values: CLI flags > settings file > DEFAULT_FLAGS.
 	const effectiveMode = flagOptions.mode || settings.mode || DEFAULT_FLAGS.mode
-	const effectiveProvider = resolveEffectiveProvider(flagOptions.provider, settings, Boolean(rooToken))
-	const effectiveBaseUrl = resolveConfiguredBaseUrl(flagOptions.baseUrl, settings)
-	const effectiveModel = resolveEffectiveModel(flagOptions.model, settings, effectiveProvider)
+	const effectiveProtocol = resolveEffectiveProtocol(flagOptions.protocol, flagOptions.provider, settings)
+	const effectiveRuntime = resolveEffectiveRuntime(flagOptions.runtime, settings)
+	const effectiveProvider = resolveEffectiveProvider(
+		flagOptions.provider,
+		settings,
+		Boolean(rooToken),
+		effectiveProtocol,
+		effectiveRuntime,
+	)
+	const effectiveBaseUrl = resolveConfiguredBaseUrl(flagOptions.baseUrl, settings, effectiveProtocol)
+	const effectiveModel = resolveEffectiveModel(
+		flagOptions.model,
+		settings,
+		effectiveProvider,
+		effectiveBaseUrl,
+		effectiveRuntime,
+	)
 	const isOnboardingEnabled =
 		isTuiEnabled && !rooToken && !flagOptions.provider && !settings.provider && effectiveProvider === "openrouter"
 	const effectiveReasoningEffort =
@@ -302,9 +360,16 @@ export async function run(promptArg: string | undefined, flagOptions: FlagOption
 			extensionHostOptions.baseUrl,
 		)
 
-	if (extensionHostOptions.provider === "openai" && !extensionHostOptions.model) {
-		console.error("[CLI] Error: No model provided for the openai provider.")
-		console.error("[CLI] Use --model, set model in cli-settings.json, or configure openAiModelId.")
+	if (
+		(extensionHostOptions.provider === "openai" || extensionHostOptions.provider === "anthropic") &&
+		!extensionHostOptions.model
+	) {
+		const providerLabel =
+			effectiveRuntime && flagOptions.provider === undefined && settings.provider === undefined
+				? `${effectiveRuntime} (${extensionHostOptions.provider}-compatible)`
+				: extensionHostOptions.provider
+		console.error(`[CLI] Error: No model provided for ${providerLabel}.`)
+		console.error("[CLI] Use --model or set model defaults in cli-settings.json for your local/private runtime.")
 		process.exit(1)
 	}
 

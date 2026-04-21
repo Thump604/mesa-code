@@ -1,14 +1,18 @@
 import {
+	isLocalBaseUrl,
 	isLocalOpenAiBaseUrl,
 	resolveConfiguredApiKey,
 	resolveConfiguredBaseUrl,
 	resolveEffectiveModel,
+	resolveEffectiveProtocol,
 	resolveEffectiveProvider,
+	resolveEffectiveRuntime,
 } from "../runtime-config.js"
 
 describe("runtime-config", () => {
-	describe("isLocalOpenAiBaseUrl", () => {
+	describe("isLocalBaseUrl", () => {
 		it("detects local loopback endpoints", () => {
+			expect(isLocalBaseUrl("http://127.0.0.1:8080/v1")).toBe(true)
 			expect(isLocalOpenAiBaseUrl("http://127.0.0.1:8080/v1")).toBe(true)
 			expect(isLocalOpenAiBaseUrl("http://localhost:1234/v1")).toBe(true)
 			expect(isLocalOpenAiBaseUrl("http://0.0.0.0:8000/v1")).toBe(true)
@@ -20,6 +24,26 @@ describe("runtime-config", () => {
 		})
 	})
 
+	describe("resolveEffectiveProtocol", () => {
+		it("prefers explicit provider over protocol settings", () => {
+			expect(resolveEffectiveProtocol("openai", "anthropic", { protocol: "openai" })).toBe("anthropic")
+		})
+
+		it("falls back to saved protocol when no provider is set", () => {
+			expect(resolveEffectiveProtocol(undefined, undefined, { protocol: "anthropic" })).toBe("anthropic")
+		})
+	})
+
+	describe("resolveEffectiveRuntime", () => {
+		it("prefers explicit runtime over saved runtime", () => {
+			expect(resolveEffectiveRuntime("vllm-mlx", { runtime: "llama.cpp" })).toBe("vllm-mlx")
+		})
+
+		it("uses saved runtime when no runtime flag is set", () => {
+			expect(resolveEffectiveRuntime(undefined, { runtime: "llama.cpp" })).toBe("llama.cpp")
+		})
+	})
+
 	describe("resolveEffectiveProvider", () => {
 		it("prefers an explicit provider flag", () => {
 			expect(
@@ -27,45 +51,95 @@ describe("runtime-config", () => {
 					"anthropic",
 					{ provider: "openai", openAiBaseUrl: "http://localhost:8080/v1" },
 					true,
+					"openai",
+					undefined,
 				),
 			).toBe("anthropic")
 		})
 
 		it("prefers configured local openai-compatible settings when no provider is set", () => {
-			expect(resolveEffectiveProvider(undefined, { openAiBaseUrl: "http://localhost:8080/v1" }, true)).toBe(
-				"openai",
+			expect(
+				resolveEffectiveProvider(
+					undefined,
+					{ openAiBaseUrl: "http://localhost:8080/v1" },
+					true,
+					"openai",
+					undefined,
+				),
+			).toBe("openai")
+		})
+
+		it("uses the selected anthropic-compatible protocol for local runtimes", () => {
+			expect(resolveEffectiveProvider(undefined, { runtime: "vllm-mlx" }, true, "anthropic", "vllm-mlx")).toBe(
+				"anthropic",
 			)
 		})
 
 		it("falls back to roo only when no local/private config is present", () => {
-			expect(resolveEffectiveProvider(undefined, {}, true)).toBe("roo")
-			expect(resolveEffectiveProvider(undefined, {}, false)).toBe("openrouter")
+			expect(resolveEffectiveProvider(undefined, {}, true, "openai", undefined)).toBe("roo")
+			expect(resolveEffectiveProvider(undefined, {}, false, "openai", undefined)).toBe("openrouter")
 		})
 	})
 
 	describe("resolveConfiguredBaseUrl", () => {
 		it("prefers an explicit base URL over settings", () => {
 			expect(
-				resolveConfiguredBaseUrl("http://127.0.0.1:8080/v1", { openAiBaseUrl: "http://localhost:1234/v1" }),
+				resolveConfiguredBaseUrl(
+					"http://127.0.0.1:8080/v1",
+					{ openAiBaseUrl: "http://localhost:1234/v1" },
+					"openai",
+				),
 			).toBe("http://127.0.0.1:8080/v1")
 		})
 
 		it("reads legacy imported openai-compatible settings", () => {
-			expect(resolveConfiguredBaseUrl(undefined, { openAiBaseUrl: "http://localhost:1234/v1" })).toBe(
+			expect(resolveConfiguredBaseUrl(undefined, { openAiBaseUrl: "http://localhost:1234/v1" }, "openai")).toBe(
 				"http://localhost:1234/v1",
 			)
+		})
+
+		it("reads explicit anthropic-compatible settings", () => {
+			expect(
+				resolveConfiguredBaseUrl(undefined, { anthropicBaseUrl: "http://localhost:8081" }, "anthropic"),
+			).toBe("http://localhost:8081")
 		})
 	})
 
 	describe("resolveEffectiveModel", () => {
 		it("uses legacy openai-compatible model settings for the openai provider", () => {
 			expect(
-				resolveEffectiveModel(undefined, { openAiModelId: "qwen3.5-27b", model: "ignored-model" }, "openai"),
+				resolveEffectiveModel(
+					undefined,
+					{ openAiModelId: "qwen3.5-27b", model: "ignored-model" },
+					"openai",
+					"http://127.0.0.1:8080/v1",
+					"vllm-mlx",
+				),
 			).toBe("qwen3.5-27b")
 		})
 
 		it("falls back to the generic configured model for non-openai providers", () => {
-			expect(resolveEffectiveModel(undefined, { model: "claude-sonnet" }, "anthropic")).toBe("claude-sonnet")
+			expect(
+				resolveEffectiveModel(
+					undefined,
+					{ model: "claude-sonnet" },
+					"anthropic",
+					"http://localhost:8081",
+					"llama.cpp",
+				),
+			).toBe("claude-sonnet")
+		})
+
+		it("does not reuse the hosted default model for local runtime profiles", () => {
+			expect(
+				resolveEffectiveModel(
+					"anthropic/claude-opus-4.6",
+					{},
+					"openai",
+					"http://127.0.0.1:8080/v1",
+					"vllm-mlx",
+				),
+			).toBe("")
 		})
 	})
 
@@ -86,6 +160,12 @@ describe("runtime-config", () => {
 					"http://127.0.0.1:8080/v1",
 				),
 			).toBe("sk-local")
+		})
+
+		it("uses a local placeholder for loopback Anthropic-compatible endpoints when no key is configured", () => {
+			expect(resolveConfiguredApiKey("anthropic", undefined, {}, undefined, "http://127.0.0.1:8081")).toBe(
+				"not-needed",
+			)
 		})
 
 		it("uses provider env keys for non-openai providers", () => {

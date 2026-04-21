@@ -18,9 +18,19 @@ import {
 	resolveConfiguredApiKey,
 	resolveConfiguredBaseUrl,
 	resolveEffectiveModel,
+	resolveEffectiveProtocol,
 	resolveEffectiveProvider,
+	resolveEffectiveRuntime,
 } from "@/lib/utils/runtime-config.js"
-import type { SupportedProvider } from "@/types/index.js"
+import {
+	isSupportedApiStandard,
+	isSupportedLocalRuntime,
+	supportedApiStandards,
+	supportedLocalRuntimes,
+	type SupportedApiStandard,
+	type SupportedLocalRuntime,
+	type SupportedProvider,
+} from "@/types/index.js"
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -33,6 +43,8 @@ type BaseListOptions = {
 	extension?: string
 	apiKey?: string
 	provider?: SupportedProvider
+	protocol?: SupportedApiStandard
+	runtime?: SupportedLocalRuntime
 	baseUrl?: string
 	format?: string
 	debug?: boolean
@@ -70,6 +82,37 @@ function resolveExtensionPath(extension: string | undefined): string {
 	}
 
 	return resolved
+}
+
+function validateProtocolAndRuntime(options: BaseListOptions): void {
+	const protocol = options.protocol
+	if (protocol && !isSupportedApiStandard(protocol)) {
+		throw new Error(`Invalid protocol: ${protocol}; must be one of: ${supportedApiStandards.join(", ")}`)
+	}
+
+	const runtime = options.runtime
+	if (runtime && !isSupportedLocalRuntime(runtime)) {
+		throw new Error(`Invalid runtime: ${runtime}; must be one of: ${supportedLocalRuntimes.join(", ")}`)
+	}
+
+	if (
+		protocol &&
+		options.provider &&
+		(options.provider === "openai" || options.provider === "anthropic") &&
+		options.provider !== protocol
+	) {
+		throw new Error(
+			`--provider ${options.provider} conflicts with --protocol ${protocol}; use matching values or omit --provider`,
+		)
+	}
+
+	if (runtime && options.provider && !["openai", "anthropic"].includes(options.provider)) {
+		throw new Error("--runtime only applies to openai/anthropic-compatible endpoint modes")
+	}
+
+	if (protocol && options.provider && !["openai", "anthropic"].includes(options.provider)) {
+		throw new Error("--protocol only applies when using openai/anthropic-compatible endpoint modes")
+	}
 }
 
 function outputJson(data: unknown): void {
@@ -113,13 +156,18 @@ function outputSessionsText(sessions: SessionLike[]): void {
 }
 
 async function createListHost(options: BaseListOptions, hostOptions: ListHostOptions): Promise<ExtensionHost> {
+	validateProtocolAndRuntime(options)
+
 	const workspacePath = resolveWorkspacePath(options.workspace)
 	const extensionPath = resolveExtensionPath(options.extension)
 	const rooToken = await loadToken()
 	const settings = await loadSettings()
-	const provider = resolveEffectiveProvider(options.provider, settings, Boolean(rooToken))
-	const baseUrl = resolveConfiguredBaseUrl(options.baseUrl, settings)
-	const model = resolveEffectiveModel(undefined, settings, provider) || getProviderDefaultModelId(provider)
+	const protocol = resolveEffectiveProtocol(options.protocol, options.provider, settings)
+	const runtime = resolveEffectiveRuntime(options.runtime, settings)
+	const provider = resolveEffectiveProvider(options.provider, settings, Boolean(rooToken), protocol, runtime)
+	const baseUrl = resolveConfiguredBaseUrl(options.baseUrl, settings, protocol)
+	const model =
+		resolveEffectiveModel(undefined, settings, provider, baseUrl, runtime) || getProviderDefaultModelId(provider)
 	const apiKey =
 		(provider === "roo" ? rooToken : undefined) ||
 		resolveConfiguredApiKey(provider, options.apiKey, settings, getApiKeyFromEnv(provider), baseUrl)
@@ -348,6 +396,10 @@ export async function listModels(options: BaseListOptions): Promise<void> {
 			}
 
 			models = await requestOpenAiModels(host, baseUrl ?? "https://api.openai.com/v1", apiKey)
+		} else if (provider === "anthropic") {
+			throw new Error(
+				"Model listing is not standardized for Anthropic-compatible endpoints yet; set --model explicitly for your runtime.",
+			)
 		} else if (provider === "openrouter" || provider === "vercel-ai-gateway") {
 			models = await requestRouterModels(host, provider)
 		} else if (provider === "roo") {

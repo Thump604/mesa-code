@@ -46,7 +46,9 @@ program
 	.option("-a, --require-approval", "Require manual approval for actions", false)
 	.option("-k, --api-key <key>", "API key for the LLM provider")
 	.option("--provider <provider>", "API provider (openai, roo, anthropic, openrouter, etc.)")
-	.option("--base-url <url>", "Base URL for OpenAI-compatible endpoints")
+	.option("--protocol <protocol>", "API standard for local/self-hosted endpoints (openai or anthropic)")
+	.option("--runtime <runtime>", "Local runtime profile (llama.cpp or vllm-mlx)")
+	.option("--base-url <url>", "Base URL for OpenAI- or Anthropic-compatible endpoints")
 	.option("-m, --model <model>", "Model to use", DEFAULT_FLAGS.model)
 	.option("--mode <mode>", "Mode to start in (code, architect, ask, debug, etc.)", DEFAULT_FLAGS.mode)
 	.option("--terminal-shell <path>", "Absolute path to shell executable for inline terminal commands")
@@ -82,7 +84,9 @@ const applyListOptions = (command: Command) =>
 		.option("-e, --extension <path>", "Path to the extension bundle directory")
 		.option("-k, --api-key <key>", "API key for the selected provider")
 		.option("--provider <provider>", "API provider for provider-aware model listing")
-		.option("--base-url <url>", "Base URL for OpenAI-compatible endpoints")
+		.option("--protocol <protocol>", "API standard for local/self-hosted endpoints")
+		.option("--runtime <runtime>", "Local runtime profile (llama.cpp or vllm-mlx)")
+		.option("--base-url <url>", "Base URL for OpenAI- or Anthropic-compatible endpoints")
 		.option("--format <format>", 'Output format: "json" (default) or "text"', "json")
 		.option("-d, --debug", "Enable debug output", false)
 
@@ -120,11 +124,11 @@ applyListOptions(listCommand.command("modes").description("List available modes"
 	},
 )
 
-applyListOptions(listCommand.command("models").description("List available models for the current provider")).action(
-	async (options: Parameters<typeof listModels>[0]) => {
-		await runListAction(() => listModels(options))
-	},
-)
+applyListOptions(
+	listCommand.command("models").description("List available models for the current provider/runtime"),
+).action(async (options: Parameters<typeof listModels>[0]) => {
+	await runListAction(() => listModels(options))
+})
 
 applyListOptions(listCommand.command("sessions").description("List task sessions")).action(
 	async (options: Parameters<typeof listSessions>[0]) => {
