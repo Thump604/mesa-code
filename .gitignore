@@ -1,4 +1,6 @@
 .pnpm-store
+.npm
+.yarn
 dist
 out
 out-*
@@ -6,15 +8,27 @@ node_modules
 package-lock.json
 coverage/
 mock/
-
+.cache/
+.eslintcache
 .DS_Store
+
+# Local/private agent tooling
+.codex/
+.claude/
+.cursor/
+.windsurf/
+.roo/
 
 # IDEs
 .idea
+.vscode/
 
 # Builds
 bin/
 *.vsix
+*.tgz
+*.tar.gz
+*.tar.gz.*
 
 # Local prompts and rules
 /local-prompts
@@ -31,10 +45,13 @@ docs/_site/
 .env
 .env.*
 !.env.*.sample
+.envrc
+.direnv/
 
 # Logging
 logs
 *.log
+*.pid
 
 # Vite development
 .vite-port

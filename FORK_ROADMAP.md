@@ -169,6 +169,7 @@ Goal: make local model use better than cloud-native competitors.
 - first-class profiles for local backends
 - explicit runtime profiles for `llama.cpp` and `vllm-mlx`
 - support both OpenAI-compatible and Anthropic-compatible local endpoint standards
+- add first-class Anthropic-compatible model discovery/listing instead of requiring manual model IDs everywhere
 - model capability registry with context, reasoning, tool, and vision metadata
 - local presets tuned for common runtimes
 - clear timeout and retry behavior for slow local inference
@@ -230,6 +231,7 @@ Exit criteria:
 - identify extension-host dependencies in the CLI
 - isolate session, provider, and output contracts
 - stabilize the structured non-interactive interface
+- add Anthropic-compatible model discovery/listing support for local runtimes
 
 ### Week 4
 
@@ -258,6 +260,7 @@ Exit criteria:
 - major reduction in extension-host coupling
 - stable JSON and stream interfaces
 - better local runtime handling
+- first-class model discovery for both OpenAI-compatible and Anthropic-compatible local runtimes
 
 ## Comparison Target
 
