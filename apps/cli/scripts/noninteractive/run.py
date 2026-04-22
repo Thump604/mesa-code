@@ -34,6 +34,14 @@ def resolve_default_api_key() -> str:
 DEFAULT_API_KEY = resolve_default_api_key()
 
 
+def decode_subprocess_output(value: str | bytes | None) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, bytes):
+        return value.decode("utf-8", "ignore")
+    return value
+
+
 def discover_active_model(base_url: str) -> str:
     normalized = base_url.rstrip("/")
     models_url = f"{normalized}/models"
@@ -174,8 +182,8 @@ def run_print_case(context: SmokeContext, case_name: str, prompt: str, expected_
             timeout=timeout,
         )
     except subprocess.TimeoutExpired as error:
-        stdout = error.stdout or ""
-        stderr = error.stderr or ""
+        stdout = decode_subprocess_output(error.stdout)
+        stderr = decode_subprocess_output(error.stderr)
         log_path.write_text(stdout + "\n--- STDERR ---\n" + stderr, encoding="utf-8")
         raise SmokeFailure(
             f"{case_name} timed out waiting for print output\nlog: {log_path}\n--- stdout tail ---\n{stdout[-2500:]}"

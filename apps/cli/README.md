@@ -45,6 +45,9 @@ controller instead of binding directly to the runtime backend.
 The remaining non-interactive shell loop now also lives in a dedicated CLI
 runner instead of being inlined inside `run.ts`, so signal handling, cleanup,
 JSON emitter attachment, and stdin-stream settlement are owned by one module.
+Queueing, cancellation, and post-cancel recovery for stdin-stream are now also
+owned by a dedicated CLI session module instead of a long inline control loop,
+so file/command automation is converging on the same session core as the TUI.
 Workspace
 file search for `@` mentions is also CLI-owned now, including
 ripgrep-backed indexing, fuzzy ranking, and `.rooignore` filtering.
@@ -167,8 +170,13 @@ List or filter the available cases:
 ```bash
 pnpm --filter @roo-code/cli test:noninteractive:smoke:list
 python3 apps/cli/scripts/noninteractive/run.py --match stdin
-python3 apps/cli/scripts/noninteractive/run.py --timeout 30
+python3 apps/cli/scripts/noninteractive/run.py --timeout 90
 ```
+
+When you run individual live cases manually against the current safe resident
+lane, use a timeout budget of at least `90` seconds. The `--print` and
+`--stdin-prompt-stream` flows both complete reliably there, but they are not
+30-second lanes on this hardware/profile.
 
 Current smoke coverage:
 

@@ -1,7 +1,9 @@
 import type { ClineMessage } from "@roo-code/types"
 import { Writable } from "stream"
 
+import type { AgentStateChangeEvent } from "../events.js"
 import { JsonEventEmitter } from "../json-event-emitter.js"
+import { AgentLoopState, type AgentStateInfo } from "../agent-state.js"
 
 function createMockStdout(): { stdout: NodeJS.WriteStream; lines: () => Record<string, unknown>[] } {
 	const chunks: string[] = []
@@ -30,6 +32,10 @@ function emitMessage(emitter: JsonEventEmitter, message: ClineMessage): void {
 	)
 }
 
+function emitStateChange(emitter: JsonEventEmitter, event: AgentStateChangeEvent): void {
+	;(emitter as unknown as { handleStateChange?: (event: AgentStateChangeEvent) => void }).handleStateChange?.(event)
+}
+
 function createAskMessage(overrides: Partial<ClineMessage>): ClineMessage {
 	return {
 		ts: 1,
@@ -39,6 +45,18 @@ function createAskMessage(overrides: Partial<ClineMessage>): ClineMessage {
 		text: "",
 		...overrides,
 	} as ClineMessage
+}
+
+function createStateInfo(overrides: Partial<AgentStateInfo>): AgentStateInfo {
+	return {
+		state: AgentLoopState.NO_TASK,
+		isWaitingForInput: false,
+		isRunning: false,
+		isStreaming: false,
+		requiredAction: "start_task",
+		description: "No active task",
+		...overrides,
+	}
 }
 
 describe("JsonEventEmitter streaming deltas", () => {
@@ -385,5 +403,45 @@ describe("JsonEventEmitter streaming deltas", () => {
 			tool_result: { name: "execute_command", output: '  "Account": "123"\n}\n', exitCode: 0 },
 			done: true,
 		})
+	})
+
+	it("does not reclassify assistant text as user after a delayed task state change", () => {
+		const { stdout, lines } = createMockStdout()
+		const emitter = new JsonEventEmitter({ mode: "stream-json", stdout })
+
+		emitMessage(emitter, {
+			ts: 700,
+			type: "say",
+			say: "text",
+			partial: false,
+			text: "Reply with PLUM.",
+		} as ClineMessage)
+
+		emitStateChange(emitter, {
+			previousState: createStateInfo({ state: AgentLoopState.NO_TASK }),
+			currentState: createStateInfo({ state: AgentLoopState.RUNNING, isRunning: true }),
+			isSignificantChange: true,
+		})
+
+		emitMessage(emitter, {
+			ts: 701,
+			type: "say",
+			say: "reasoning",
+			partial: false,
+			text: "Need to answer with PLUM.",
+		} as ClineMessage)
+
+		emitMessage(emitter, {
+			ts: 702,
+			type: "say",
+			say: "text",
+			partial: false,
+			text: "PLUM",
+		} as ClineMessage)
+
+		const output = lines()
+		expect(output[0]).toMatchObject({ type: "user", content: "Reply with PLUM." })
+		expect(output[1]).toMatchObject({ type: "thinking", content: "Need to answer with PLUM.", done: true })
+		expect(output[2]).toMatchObject({ type: "assistant", content: "PLUM", done: true })
 	})
 })
