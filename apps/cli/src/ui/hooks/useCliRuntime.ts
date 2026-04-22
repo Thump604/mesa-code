@@ -4,8 +4,7 @@ import { randomUUID } from "crypto"
 import type { ExtensionMessage } from "@roo-code/types"
 
 import {
-	activateCliRuntimeSession,
-	runInitialSessionLaunch,
+	startCliRuntimeSession,
 	type CliRuntime,
 	type CliRuntimeOptions,
 	type CreateCliRuntime,
@@ -78,27 +77,27 @@ export function useCliRuntime({
 			try {
 				const requestedSessionId = initialSessionId?.trim()
 
-				const runtime = createCliRuntime({
-					mode,
-					user,
-					reasoningEffort,
-					provider,
-					apiKey,
-					model,
-					workspacePath,
-					extensionPath,
-					nonInteractive,
-					ephemeral,
-					debug,
-					exitOnComplete,
-					disableOutput: true,
-				})
-
-				runtimeRef.current = runtime
-				isReadyRef.current = true
-
-				const initialLaunch = await activateCliRuntimeSession({
-					runtime,
+				await startCliRuntimeSession({
+					createCliRuntime,
+					runtimeOptions: {
+						mode,
+						user,
+						reasoningEffort,
+						provider,
+						apiKey,
+						model,
+						workspacePath,
+						extensionPath,
+						nonInteractive,
+						ephemeral,
+						debug,
+						exitOnComplete,
+						disableOutput: true,
+					},
+					afterCreate: (createdRuntime) => {
+						runtimeRef.current = createdRuntime
+						isReadyRef.current = true
+					},
 					initialLaunch: {
 						initialPrompt,
 						initialTaskId: pendingInitialTaskIdRef.current,
@@ -123,28 +122,33 @@ export function useCliRuntime({
 					afterActivate: (activeRuntime) => {
 						activeRuntime.refreshCliMetadata()
 					},
-				})
-
-				await runInitialSessionLaunch({
-					runtime,
-					launch: initialLaunch,
 					onIdle: () => {
 						setLoading(false)
 					},
 					onResume: async (launch) => {
+						const activeRuntime = runtimeRef.current
+						if (!activeRuntime) {
+							throw new Error("CLI runtime not ready")
+						}
+
 						setCurrentTaskId(launch.sessionId)
 						setIsResumingTask(true)
 						setHasStartedTask(true)
 						setLoading(true)
-						runtime.selectTask(launch.sessionId)
+						activeRuntime.selectTask(launch.sessionId)
 					},
 					onStart: async (launch) => {
+						const activeRuntime = runtimeRef.current
+						if (!activeRuntime) {
+							throw new Error("CLI runtime not ready")
+						}
+
 						setLoading(false)
 						setHasStartedTask(true)
 						setLoading(true)
 						addMessage({ id: randomUUID(), role: "user", content: launch.prompt })
 						pendingInitialTaskIdRef.current = undefined
-						await runtime.runTask(launch.prompt, launch.taskId)
+						await activeRuntime.runTask(launch.prompt, launch.taskId)
 					},
 				})
 			} catch (err) {

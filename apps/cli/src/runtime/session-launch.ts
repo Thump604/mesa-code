@@ -2,7 +2,7 @@ import type { ExtensionMessage } from "@roo-code/types"
 
 import type { TaskCompletedEvent } from "@/agent/events.js"
 
-import type { CliRuntime } from "./runtime.js"
+import type { CliRuntime, CliRuntimeOptions, CreateCliRuntime } from "./runtime.js"
 
 import { resolveWorkspaceResumeSessionId } from "@/lib/task-history/index.js"
 
@@ -42,6 +42,19 @@ export interface RunInitialSessionLaunchOptions {
 	onStart?: (launch: Extract<InitialSessionLaunch, { kind: "start" }>) => void | Promise<void>
 	onResume?: (launch: Extract<InitialSessionLaunch, { kind: "resume" }>) => void | Promise<void>
 	onIdle?: (launch: Extract<InitialSessionLaunch, { kind: "idle" }>) => void | Promise<void>
+}
+
+export interface StartCliRuntimeSessionOptions
+	extends Omit<ActivateCliRuntimeSessionOptions, "runtime">,
+		Omit<RunInitialSessionLaunchOptions, "runtime" | "launch"> {
+	createCliRuntime: CreateCliRuntime
+	runtimeOptions: CliRuntimeOptions
+	afterCreate?: (runtime: CliRuntime) => void | Promise<void>
+}
+
+export interface StartedCliRuntimeSession {
+	runtime: CliRuntime
+	launch: InitialSessionLaunch
 }
 
 export async function resolveInitialSessionLaunch(
@@ -93,6 +106,44 @@ export async function activateCliRuntimeSession({
 	await runtime.activate()
 	await afterActivate?.(runtime)
 	return resolveInitialSessionLaunch(runtime, initialLaunch)
+}
+
+export async function startCliRuntimeSession({
+	createCliRuntime,
+	runtimeOptions,
+	afterCreate,
+	initialLaunch,
+	onMessage,
+	onTaskCompleted,
+	onError,
+	afterActivate,
+	onStart,
+	onResume,
+	onIdle,
+}: StartCliRuntimeSessionOptions): Promise<StartedCliRuntimeSession> {
+	const runtime = createCliRuntime(runtimeOptions)
+	await afterCreate?.(runtime)
+	const launch = await activateCliRuntimeSession({
+		runtime,
+		initialLaunch,
+		onMessage,
+		onTaskCompleted,
+		onError,
+		afterActivate,
+	})
+
+	await runInitialSessionLaunch({
+		runtime,
+		launch,
+		onStart,
+		onResume,
+		onIdle,
+	})
+
+	return {
+		runtime,
+		launch,
+	}
 }
 
 export async function runInitialSessionLaunch({

@@ -28,8 +28,9 @@ extension bundle through its returned API surface instead of constructing `Exten
 directly at each call site. Task selection, mode changes, and task-message submission are
 expressed as CLI-owned runtime operations rather than raw VS Code webview messages in the
 caller layer. TUI and print-mode entrypoints also now share one runtime-backed session
-launch layer for `start`, `resume`, and `continue`, including shared resolution and
-shared execution hooks instead of each surface carrying its own boot switch. Workspace
+runner for `start`, `resume`, and `continue`, including shared runtime creation,
+activation, resolution, and execution hooks instead of each surface carrying its own
+boot switch. Workspace
 file search for `@` mentions is also CLI-owned now, including
 ripgrep-backed indexing, fuzzy ranking, and `.rooignore` filtering.
 

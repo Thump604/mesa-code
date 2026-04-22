@@ -21,13 +21,7 @@ import {
 } from "@/types/index.js"
 import { isValidOutputFormat } from "@/types/json-events.js"
 import { JsonEventEmitter } from "@/agent/json-event-emitter.js"
-import {
-	activateCliRuntimeSession,
-	createCliRuntime,
-	runInitialSessionLaunch,
-	type CliRuntime,
-	type CliRuntimeOptions,
-} from "@/runtime/index.js"
+import { createCliRuntime, startCliRuntimeSession, type CliRuntime, type CliRuntimeOptions } from "@/runtime/index.js"
 
 import { getOpsModeContract, resolveOpsBaseUrl } from "@/lib/ops-control-plane.js"
 import { loadSettings } from "@/lib/storage/index.js"
@@ -467,7 +461,7 @@ export async function run(promptArg: string | undefined, flagOptions: FlagOption
 
 		runtimeOptions.disableOutput = useJsonOutput
 
-		const runtime = createCliRuntime(runtimeOptions)
+		let runtime: CliRuntime | null = null
 		let streamRequestId: string | undefined
 		let keepAliveInterval: NodeJS.Timeout | undefined
 		let isShuttingDown = false
@@ -532,7 +526,7 @@ export async function run(promptArg: string | undefined, flagOptions: FlagOption
 		}
 
 		const disposeRuntime = async () => {
-			if (runtimeDisposed) {
+			if (runtimeDisposed || !runtime) {
 				return
 			}
 
@@ -631,14 +625,23 @@ export async function run(promptArg: string | undefined, flagOptions: FlagOption
 		process.on("unhandledRejection", onUnhandledRejection)
 
 		try {
-			const initialLaunch = await activateCliRuntimeSession({
-				runtime,
+			const startedSession = await startCliRuntimeSession({
+				createCliRuntime,
+				runtimeOptions,
+				afterCreate: (createdRuntime) => {
+					runtime = createdRuntime
+				},
 				initialLaunch: {
 					initialPrompt: prompt,
 					initialTaskId: requestedCreateSessionId,
 					initialSessionId: requestedSessionId,
 					continueSession: shouldContinueSession,
 				},
+				onResume: useStdinPromptStream
+					? async (launch) => {
+							await bootstrapResumeForStdinStream(runtime!, launch.sessionId)
+						}
+					: undefined,
 				afterActivate: (activeRuntime) => {
 					if (jsonEmitter) {
 						activeRuntime.attachJsonEmitter(jsonEmitter)
@@ -651,25 +654,12 @@ export async function run(promptArg: string | undefined, flagOptions: FlagOption
 					throw new Error("--stdin-prompt-stream requires --output-format=stream-json to emit control events")
 				}
 
-				await runInitialSessionLaunch({
-					runtime,
-					launch: initialLaunch,
-					onResume: async (launch) => {
-						await bootstrapResumeForStdinStream(runtime, launch.sessionId)
-					},
-				})
-
 				await runStdinStreamMode({
-					runtime,
+					runtime: startedSession.runtime,
 					jsonEmitter,
 					setStreamRequestId: (id) => {
 						streamRequestId = id
 					},
-				})
-			} else {
-				await runInitialSessionLaunch({
-					runtime,
-					launch: initialLaunch,
 				})
 			}
 

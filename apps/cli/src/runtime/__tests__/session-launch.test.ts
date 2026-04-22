@@ -1,7 +1,12 @@
 import { describe, expect, it, vi } from "vitest"
 
 import type { CliRuntime } from "../runtime.js"
-import { activateCliRuntimeSession, resolveInitialSessionLaunch, runInitialSessionLaunch } from "../session-launch.js"
+import {
+	activateCliRuntimeSession,
+	resolveInitialSessionLaunch,
+	runInitialSessionLaunch,
+	startCliRuntimeSession,
+} from "../session-launch.js"
 
 function createRuntimeHarness(taskHistory = [{ id: "latest", task: "task", ts: 100, workspace: "/workspace" }]) {
 	return {
@@ -185,5 +190,53 @@ describe("activateCliRuntimeSession", () => {
 		expect(runtime.activate).toHaveBeenCalledOnce()
 		expect(afterActivate).toHaveBeenCalledWith(runtime)
 		expect(runtime.readTaskHistory).toHaveBeenCalledOnce()
+	})
+})
+
+describe("startCliRuntimeSession", () => {
+	it("creates the runtime, exposes it early, and executes the resolved launch", async () => {
+		const runtime = createRuntimeHarness([{ id: "task-new", task: "new", ts: 200, workspace: "/workspace" }])
+		const createCliRuntime = vi.fn().mockReturnValue(runtime)
+		const afterCreate = vi.fn()
+		const afterActivate = vi.fn()
+		const onResume = vi.fn().mockResolvedValue(undefined)
+
+		await expect(
+			startCliRuntimeSession({
+				createCliRuntime,
+				runtimeOptions: {
+					mode: "code",
+					user: null,
+					provider: "openai",
+					model: "qwen3-coder",
+					baseUrl: "http://127.0.0.1:8080/v1",
+					workspacePath: "/workspace",
+					extensionPath: "/extension",
+					ephemeral: false,
+					debug: false,
+					exitOnComplete: false,
+				},
+				afterCreate,
+				afterActivate,
+				initialLaunch: { continueSession: true },
+				onResume,
+			}),
+		).resolves.toEqual({
+			runtime,
+			launch: {
+				kind: "resume",
+				sessionId: "task-new",
+			},
+		})
+
+		expect(createCliRuntime).toHaveBeenCalledOnce()
+		expect(afterCreate).toHaveBeenCalledWith(runtime)
+		expect(runtime.activate).toHaveBeenCalledOnce()
+		expect(afterActivate).toHaveBeenCalledWith(runtime)
+		expect(onResume).toHaveBeenCalledWith({
+			kind: "resume",
+			sessionId: "task-new",
+		})
+		expect(runtime.resumeTask).not.toHaveBeenCalled()
 	})
 })
