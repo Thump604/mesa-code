@@ -21,9 +21,9 @@ export async function status(options: StatusOptions = {}): Promise<StatusResult>
 	const token = await loadToken()
 
 	if (!token) {
-		console.log("✗ Not authenticated")
+		console.log("✗ Roo compatibility auth not configured")
 		console.log("")
-		console.log("Run: roo auth login")
+		console.log("Run: roo auth login if you explicitly need Roo Cloud compatibility mode")
 		return { authenticated: false }
 	}
 
@@ -35,9 +35,9 @@ export async function status(options: StatusOptions = {}): Promise<StatusResult>
 	const createdAt = credentials?.createdAt ? new Date(credentials.createdAt) : undefined
 
 	if (expired) {
-		console.log("✗ Authentication token expired")
+		console.log("✗ Roo compatibility token expired")
 		console.log("")
-		console.log("Run: roo auth login")
+		console.log("Run: roo auth login if you still need Roo Cloud compatibility mode")
 
 		return {
 			authenticated: false,
@@ -47,9 +47,9 @@ export async function status(options: StatusOptions = {}): Promise<StatusResult>
 	}
 
 	if (expiringSoon) {
-		console.log("⚠ Expires soon; refresh with `roo auth login`")
+		console.log("⚠ Roo compatibility token expires soon; refresh with `roo auth login`")
 	} else {
-		console.log("✓ Authenticated")
+		console.log("✓ Roo compatibility auth configured")
 	}
 
 	if (expiresAt) {

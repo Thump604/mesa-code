@@ -14,6 +14,7 @@ This fork should optimize for:
 - CLI quality over feature sprawl
 
 This fork should not try to win by rebuilding every part of the current Roo product surface at once.
+It is explicitly not a "save the VS Code extension" project. The core bet is the CLI.
 
 ## Product Position
 
@@ -34,7 +35,8 @@ A CLI-native coding agent for local and private environments:
 - mandatory account auth
 - hosted model routing
 - telemetry-led growth loops
-- a full replacement for the Roo VS Code extension in v1
+- editor continuity as the primary mission
+- a full replacement for the Roo VS Code extension in v1, and possibly not at all unless the CLI is already strong enough to justify a thin adapter
 
 ## Why This Fork Can Work
 
@@ -92,7 +94,7 @@ If the fork is successful, users should describe it as:
    Tool permissions, MCP, and shell execution should prefer explicit approval and clear boundaries.
 
 6. CLI first, extension later
-   The CLI should be the core product. Editor integrations can follow.
+   The CLI should be the product. If editor integrations exist later, they should be thin adapters over CLI-owned state and execution.
 
 ## Roadmap
 
@@ -152,13 +154,14 @@ Goal: stop treating the CLI as a thin shell around the extension runtime.
 
 - carve out a CLI-native execution core
 - move session storage and state handling into CLI-owned modules
+- replace extension-host mediated discovery and control paths with direct CLI-owned implementations
 - keep structured output modes stable: text, json, stream-json
 - preserve resume, continue, and harness flows
-- reduce extension-host coupling until the CLI can operate independently
+- remove extension-host coupling until the CLI can operate independently
 
 Exit criteria:
 
-- CLI no longer requires the extension host as the primary runtime boundary
+- CLI no longer requires the VS Code extension host as the runtime boundary
 - core agent loop is testable without the VS Code stack
 - CLI startup, reliability, and debuggability improve materially
 
@@ -197,7 +200,7 @@ Exit criteria:
 - the fork has a concrete security story beyond "open source"
 - risk boundaries are legible to security-conscious users
 
-### Phase 6: Editor Bridge
+### Phase 6: Optional Editor Bridge
 
 Goal: support editor users without making the extension the product center again.
 
@@ -205,10 +208,11 @@ Goal: support editor users without making the extension the product center again
 - keep terminal-native state as the source of truth
 - reuse CLI session and model infrastructure
 - avoid rebuilding cloud-shaped webview complexity unless demand proves it
+- do not reintroduce editor-only features that pull the runtime back behind a VS Code boundary
 
 Exit criteria:
 
-- editor support exists
+- any editor support is a thin adapter, not a parallel product
 - CLI remains the primary product and architecture center
 
 ## First 30 Days
@@ -231,6 +235,7 @@ Exit criteria:
 - identify extension-host dependencies in the CLI
 - isolate session, provider, and output contracts
 - stabilize the structured non-interactive interface
+- replace discovery and listing paths with CLI-native implementations
 - add Anthropic-compatible model discovery/listing support for local runtimes
 
 ### Week 4

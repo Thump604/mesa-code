@@ -26,8 +26,8 @@ export async function runOnboarding(): Promise<OnboardingResult> {
 					skipped: false,
 				})
 			} else {
-				console.log("Using your own API key.")
-				console.log("Set your API key via --api-key or environment variable.")
+				console.log("Using local/self-hosted provider mode.")
+				console.log("Set --runtime/--protocol/--base-url and --model, or configure provider env vars.")
 				console.log("")
 				resolve({ choice: OnboardingProviderChoice.Byok, skipped: false })
 			}

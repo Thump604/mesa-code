@@ -296,7 +296,7 @@ export async function run(promptArg: string | undefined, flagOptions: FlagOption
 		terminalShell,
 	}
 
-	// Roo Code Cloud Authentication
+	// Roo compatibility auth remains available, but local/self-hosted usage is the preferred CLI path.
 
 	if (isOnboardingEnabled) {
 		let { onboardingProviderChoice } = settings
@@ -328,9 +328,11 @@ export async function run(promptArg: string | undefined, flagOptions: FlagOption
 				// If an explicit API key was provided via flag or env var, fall through
 				// to the general API key resolution below instead of exiting.
 				if (!flagOptions.apiKey && !getApiKeyFromEnv(extensionHostOptions.provider)) {
-					console.error("[CLI] Your Roo Code Router token is not valid.")
+					console.error("[CLI] Your Roo compatibility token is not valid.")
 					console.error("[CLI] Please run: roo auth login")
-					console.error("[CLI] Or use --api-key or set ROO_API_KEY to provide your own API key.")
+					console.error(
+						"[CLI] Or switch to a local/self-hosted provider with --provider/--runtime/--base-url.",
+					)
 					process.exit(1)
 				}
 			}
@@ -375,9 +377,9 @@ export async function run(promptArg: string | undefined, flagOptions: FlagOption
 
 	if (!extensionHostOptions.apiKey) {
 		if (extensionHostOptions.provider === "roo") {
-			console.error("[CLI] Error: Authentication with Roo Code Cloud failed or was cancelled.")
+			console.error("[CLI] Error: Roo Cloud compatibility authentication failed or was cancelled.")
 			console.error("[CLI] Please run: roo auth login")
-			console.error("[CLI] Or use --api-key to provide your own API key.")
+			console.error("[CLI] Or switch to a local/self-hosted provider with --provider/--runtime/--base-url.")
 		} else {
 			console.error(
 				`[CLI] Error: No API key provided. Use --api-key or set the appropriate environment variable.`,

@@ -18,7 +18,9 @@ const program = new Command()
 
 program
 	.name("roo")
-	.description("Roo Code CLI - starts an interactive session by default, use -p/--print for non-interactive output")
+	.description(
+		"Roo Code CLI - local/private-first agent, interactive by default; use -p/--print for non-interactive output",
+	)
 	.version(VERSION)
 	.enablePositionalOptions()
 	.passThroughOptions()
@@ -41,7 +43,6 @@ program
 		"Do not exit from normal completion/errors; only terminate on SIGINT/SIGTERM (intended for stdin stream harnesses)",
 		false,
 	)
-	.option("-e, --extension <path>", "Path to the extension bundle directory")
 	.option("-d, --debug", "Enable debug output (includes detailed debug information)", false)
 	.option("-a, --require-approval", "Require manual approval for actions", false)
 	.option("-k, --api-key <key>", "API key for the LLM provider")
@@ -74,14 +75,13 @@ program
 
 const listCommand = program
 	.command("list")
-	.description("List commands, modes, models, or sessions")
+	.description("List CLI-native commands, modes, models, or sessions")
 	.enablePositionalOptions()
 	.passThroughOptions()
 
 const applyListOptions = (command: Command) =>
 	command
 		.option("-w, --workspace <path>", "Workspace directory path (defaults to current working directory)")
-		.option("-e, --extension <path>", "Path to the extension bundle directory")
 		.option("-k, --api-key <key>", "API key for the selected provider")
 		.option("--provider <provider>", "API provider for provider-aware model listing")
 		.option("--protocol <protocol>", "API standard for local/self-hosted endpoints")
@@ -143,11 +143,11 @@ program
 		await runUpgradeAction(() => upgrade())
 	})
 
-const authCommand = program.command("auth").description("Manage authentication for Roo Code Cloud")
+const authCommand = program.command("auth").description("Manage legacy Roo Cloud compatibility authentication")
 
 authCommand
 	.command("login")
-	.description("Authenticate with Roo Code Cloud")
+	.description("Authenticate for legacy Roo Cloud compatibility mode")
 	.option("-v, --verbose", "Enable verbose output", false)
 	.action(async (options: { verbose: boolean }) => {
 		const result = await login({ verbose: options.verbose })
@@ -156,7 +156,7 @@ authCommand
 
 authCommand
 	.command("logout")
-	.description("Log out from Roo Code Cloud")
+	.description("Log out from Roo Cloud compatibility mode")
 	.option("-v, --verbose", "Enable verbose output", false)
 	.action(async (options: { verbose: boolean }) => {
 		const result = await logout({ verbose: options.verbose })
@@ -165,7 +165,7 @@ authCommand
 
 authCommand
 	.command("status")
-	.description("Show authentication status")
+	.description("Show Roo Cloud compatibility auth status")
 	.option("-v, --verbose", "Enable verbose output", false)
 	.action(async (options: { verbose: boolean }) => {
 		const result = await status({ verbose: options.verbose })
