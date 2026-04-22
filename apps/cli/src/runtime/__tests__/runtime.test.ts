@@ -215,4 +215,46 @@ describe("BundleApiCliRuntime", () => {
 
 		await runtime.dispose()
 	})
+
+	it("waits for resumed task history before publishing state", async () => {
+		vi.useFakeTimers()
+
+		try {
+			const { runtime, currentTask, resumeTask } = createRuntimeHarness()
+			const restoredMessage = {
+				ts: 42,
+				type: "say",
+				say: "text",
+				text: "restored history",
+				partial: false,
+			} as const satisfies ClineMessage
+			const messages: unknown[] = []
+
+			resumeTask.mockImplementation(async () => {
+				setTimeout(() => {
+					currentTask.clineMessages = [restoredMessage]
+				}, 100)
+			})
+
+			runtime.onMessage((message) => messages.push(message))
+			await runtime.activate()
+
+			runtime.selectTask("task-1")
+			await vi.advanceTimersByTimeAsync(250)
+
+			const stateMessages = messages.filter(
+				(message): message is { type: string; state?: { clineMessages?: ClineMessage[] } } =>
+					typeof message === "object" && message !== null && (message as { type?: string }).type === "state",
+			)
+			const resumedState = stateMessages.find((message) =>
+				message.state?.clineMessages?.some(
+					(entry) => entry.ts === restoredMessage.ts && entry.text === restoredMessage.text,
+				),
+			)
+
+			expect(resumedState).toBeDefined()
+		} finally {
+			vi.useRealTimers()
+		}
+	})
 })

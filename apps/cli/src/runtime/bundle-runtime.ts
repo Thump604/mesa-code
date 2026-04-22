@@ -632,6 +632,43 @@ export class BundleApiCliRuntime implements CliRuntime {
 		return this.api?.getCurrentTaskStack().at(-1)
 	}
 
+	private async waitForTaskHistoryHydration(taskId: string, timeoutMs = 5_000): Promise<void> {
+		const startedAt = Date.now()
+
+		while (Date.now() - startedAt < timeoutMs) {
+			const currentTask = this.getCurrentTask()
+			if (
+				currentTask?.taskId === taskId &&
+				Array.isArray(currentTask.clineMessages) &&
+				currentTask.clineMessages.length > 0
+			) {
+				return
+			}
+
+			await new Promise((resolve) => setTimeout(resolve, 25))
+		}
+	}
+
+	private async readPersistedTaskMessages(taskId: string): Promise<ClineMessage[] | null> {
+		if (!this.globalStoragePath) {
+			return null
+		}
+
+		const messagesPath = path.join(this.globalStoragePath, "tasks", taskId, "ui_messages.json")
+
+		try {
+			const raw = await fs.promises.readFile(messagesPath, "utf-8")
+			const parsed = JSON.parse(raw)
+			return Array.isArray(parsed) ? (parsed as ClineMessage[]) : null
+		} catch (error) {
+			if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+				return null
+			}
+
+			throw error
+		}
+	}
+
 	private getCurrentApiConfiguration(): Record<string, unknown> {
 		return (
 			this.getCurrentTask()?.apiConfiguration ||
@@ -714,6 +751,14 @@ export class BundleApiCliRuntime implements CliRuntime {
 
 				await api.resumeTask(message.text)
 				this.currentTaskId = message.text
+				await this.waitForTaskHistoryHydration(message.text)
+				const currentTask = this.getCurrentTask()
+				if (!Array.isArray(currentTask?.clineMessages) || currentTask.clineMessages.length === 0) {
+					const persistedMessages = await this.readPersistedTaskMessages(message.text)
+					if (persistedMessages?.length) {
+						this.currentMessages = [...persistedMessages]
+					}
+				}
 				await this.publishState({ includeMessages: true, includeTaskHistory: true })
 				return
 			}

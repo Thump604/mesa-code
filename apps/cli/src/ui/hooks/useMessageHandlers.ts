@@ -60,6 +60,7 @@ export function useMessageHandlers({ nonInteractive }: UseMessageHandlersOptions
 		(ts: number, say: ClineSay, text: string, partial: boolean) => {
 			const messageId = ts.toString()
 			const isResuming = useCLIStore.getState().isResumingTask
+			const existingMessage = useCLIStore.getState().messages.find((message) => message.id === messageId)
 
 			if (say === "checkpoint_saved") {
 				return
@@ -82,7 +83,7 @@ export function useMessageHandlers({ nonInteractive }: UseMessageHandlersOptions
 				return
 			}
 
-			if (seenMessageIds.current.has(messageId) && !partial) {
+			if (seenMessageIds.current.has(messageId) && !partial && !existingMessage?.partial) {
 				return
 			}
 

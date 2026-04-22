@@ -109,6 +109,32 @@ still used as a transitional dependency:
 pnpm --filter roo-cline bundle
 ```
 
+## TUI Smoke Tests
+
+The CLI now has a real PTY-driven TUI smoke lane for high-value interactive
+flows. It runs against a live local OpenAI-compatible endpoint, uses an
+isolated temporary `HOME`, builds the CLI and extension bundle first, and
+drives the Ink UI through a pseudo-terminal instead of relying on mocks.
+
+```bash
+pnpm --filter @roo-code/cli test:tui:smoke
+```
+
+List or filter the available cases:
+
+```bash
+pnpm --filter @roo-code/cli test:tui:smoke:list
+python3 apps/cli/scripts/tui/run.py --match approval
+```
+
+Current smoke coverage:
+
+- launch and render
+- live prompt submission
+- approval-required prompt handling
+- autocomplete picker navigation
+- resume an existing session across a TUI restart
+
 ## Usage
 
 ### Interactive Mode (Default)
