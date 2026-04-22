@@ -166,6 +166,7 @@ python3 apps/cli/scripts/noninteractive/run.py --timeout 30
 
 Current smoke coverage:
 
+- raw OpenAI-compatible streaming baseline against the active runtime
 - live `--print` prompt execution
 - live `--stdin-prompt-stream` start/result/shutdown flow
 

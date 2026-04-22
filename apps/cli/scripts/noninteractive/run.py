@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
 import os
 import select
@@ -49,6 +50,83 @@ def discover_active_model(base_url: str) -> str:
         raise SmokeFailure(f"model discovery returned invalid payload from {models_url}")
 
     return model_id
+
+
+def run_streaming_baseline_case(
+    context: "SmokeContext",
+    case_name: str,
+    prompt: str,
+    expected_text: str,
+    timeout: float,
+) -> None:
+    log_path = context.logs_root / f"{case_name}.sse.log"
+    request = urllib.request.Request(
+        f"{context.base_url.rstrip('/')}/chat/completions",
+        data=json.dumps(
+            {
+                "model": context.model,
+                "stream": True,
+                "messages": [{"role": "user", "content": prompt}],
+            }
+        ).encode("utf-8"),
+        headers={
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {context.api_key}",
+        },
+        method="POST",
+    )
+
+    started = time.time()
+    raw_lines: list[str] = []
+    accumulated_content = ""
+
+    try:
+        with contextlib.closing(urllib.request.urlopen(request, timeout=timeout)) as response:
+            while time.time() - started < timeout:
+                line = response.readline()
+                if not line:
+                    break
+
+                decoded = line.decode("utf-8", "ignore")
+                raw_lines.append(decoded)
+                stripped = decoded.strip()
+
+                if not stripped or not stripped.startswith("data: "):
+                    continue
+
+                payload = stripped[6:]
+                if payload == "[DONE]":
+                    break
+
+                try:
+                    event = json.loads(payload)
+                except json.JSONDecodeError:
+                    continue
+
+                choices = event.get("choices")
+                if not isinstance(choices, list) or not choices:
+                    continue
+
+                delta = choices[0].get("delta")
+                if not isinstance(delta, dict):
+                    continue
+
+                content = delta.get("content")
+                if isinstance(content, str) and content:
+                    accumulated_content += content
+                    if expected_text in accumulated_content:
+                        log_path.write_text("".join(raw_lines), encoding="utf-8")
+                        return
+    except Exception as error:  # noqa: BLE001
+        log_path.write_text("".join(raw_lines), encoding="utf-8")
+        raise SmokeFailure(
+            f"{case_name} failed during raw streaming baseline: {error}\nlog: {log_path}\n--- sse tail ---\n{''.join(raw_lines)[-2500:]}"
+        ) from error
+
+    log_path.write_text("".join(raw_lines), encoding="utf-8")
+    raise SmokeFailure(
+        f'{case_name} did not observe expected streamed text "{expected_text}"\nlog: {log_path}\n--- sse tail ---\n{"".join(raw_lines)[-2500:]}'
+    )
 
 
 @dataclass
@@ -346,7 +424,18 @@ def case_stdin_stream_live(context: SmokeContext) -> None:
     )
 
 
+def case_streaming_baseline_live(context: SmokeContext) -> None:
+    run_streaming_baseline_case(
+        context,
+        "streaming-baseline-live",
+        "Reply with the single word KIWI and nothing else.",
+        "KIWI",
+        timeout=min(20.0, context.timeout),
+    )
+
+
 CASES = {
+    "streaming-baseline-live": case_streaming_baseline_live,
     "print-live": case_print_live,
     "stdin-stream-live": case_stdin_stream_live,
 }
