@@ -33,6 +33,14 @@ vi.mock("@/lib/discovery/models.js", () => ({
 	getRouterModels: vi.fn(),
 }))
 
+vi.mock("@/lib/utils/provider.js", async (importOriginal) => {
+	const actual = await importOriginal<typeof import("@/lib/utils/provider.js")>()
+	return {
+		...actual,
+		getApiKeyFromEnv: vi.fn(() => undefined),
+	}
+})
+
 const { loadCliModes } = await import("@/lib/discovery/modes.js")
 const { getCliCommands } = await import("@/lib/discovery/commands.js")
 const { getOpenAiCompatibleModels, getAnthropicCompatibleModels, getRouterModels } = await import(
@@ -161,6 +169,22 @@ describe("list commands, modes, models, sessions", () => {
 
 		expect(getAnthropicCompatibleModels).toHaveBeenCalledWith("http://127.0.0.1:8081", "not-needed")
 		expect(output.trim().split("\n")).toEqual(["claude-alt", "claude-local"])
+	})
+
+	it("defaults local runtime listings to loopback endpoints", async () => {
+		vi.mocked(getOpenAiCompatibleModels).mockResolvedValue({
+			"qwen3-coder": { maxTokens: 4096, contextWindow: 131072, supportsPromptCache: false },
+		})
+
+		await captureStdout(() =>
+			listModels({
+				format: "json",
+				workspace: workspacePath,
+				runtime: "vllm-mlx",
+			}),
+		)
+
+		expect(getOpenAiCompatibleModels).toHaveBeenCalledWith("http://127.0.0.1:8080/v1", "not-needed")
 	})
 
 	it("lists router-backed models directly", async () => {

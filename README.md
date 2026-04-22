@@ -47,6 +47,8 @@ What is next:
 
 - bundle-API runtime backend instead of direct `ExtensionHost` control
 - CLI-owned workspace file search/autocomplete instead of extension-side lookup
+- local runtime doctor and zero-friction setup path
+- unified local-runtime observability around Prometheus/OpenTelemetry-style metrics
 - Anthropic-compatible model discovery/listing
 - fully CLI-native execution core beyond the transitional bundle backend
 - local doctor/bootstrap flows

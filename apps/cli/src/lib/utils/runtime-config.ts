@@ -1,4 +1,4 @@
-import { DEFAULT_FLAGS } from "@/types/constants.js"
+import { DEFAULT_FLAGS, DEFAULT_LOCAL_BASE_URLS } from "@/types/constants.js"
 import type { CliSettings, SupportedApiStandard, SupportedLocalRuntime, SupportedProvider } from "@/types/index.js"
 
 function getProtocolBaseUrlEnvVar(protocol: SupportedApiStandard): string | undefined {
@@ -86,8 +86,14 @@ export function resolveConfiguredBaseUrl(
 	flagBaseUrl: string | undefined,
 	settings: CliSettings,
 	protocol: SupportedApiStandard,
+	runtime?: SupportedLocalRuntime,
 ): string | undefined {
-	return flagBaseUrl ?? getSettingsBaseUrl(settings, protocol) ?? getProtocolBaseUrlEnvVar(protocol)
+	return (
+		flagBaseUrl ??
+		getSettingsBaseUrl(settings, protocol) ??
+		getProtocolBaseUrlEnvVar(protocol) ??
+		(runtime ? DEFAULT_LOCAL_BASE_URLS[protocol] : undefined)
+	)
 }
 
 export function resolveEffectiveProvider(

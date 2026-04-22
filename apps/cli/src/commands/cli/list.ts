@@ -142,7 +142,7 @@ async function resolveModelOptions(options: BaseListOptions) {
 	const protocol = resolveEffectiveProtocol(options.protocol, options.provider, settings)
 	const runtime = resolveEffectiveRuntime(options.runtime, settings)
 	const provider = resolveEffectiveProvider(options.provider, settings, protocol, runtime)
-	const baseUrl = resolveConfiguredBaseUrl(options.baseUrl, settings, protocol)
+	const baseUrl = resolveConfiguredBaseUrl(options.baseUrl, settings, protocol, runtime)
 	const model =
 		resolveEffectiveModel(undefined, settings, provider, baseUrl, runtime) || getProviderDefaultModelId(provider)
 	const apiKey = resolveConfiguredApiKey(provider, options.apiKey, settings, getApiKeyFromEnv(provider), baseUrl)

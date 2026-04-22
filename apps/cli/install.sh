@@ -7,13 +7,14 @@
 #   ROO_BIN_DIR       - Binary symlink directory (default: ~/.local/bin)
 #   ROO_VERSION       - Specific version to install (default: latest)
 #   ROO_LOCAL_TARBALL - Path to local tarball to install (skips download)
+#   ROO_REPO          - GitHub repository to install from (default: RooCodeInc/Roo-Code)
 
 set -e
 
 # Configuration
 INSTALL_DIR="${ROO_INSTALL_DIR:-$HOME/.roo/cli}"
 BIN_DIR="${ROO_BIN_DIR:-$HOME/.local/bin}"
-REPO="RooCodeInc/Roo-Code"
+REPO="${ROO_REPO:-RooCodeInc/Roo-Code}"
 MIN_NODE_VERSION=20
 
 # Color output (only if terminal supports it)
@@ -325,8 +326,11 @@ print_success() {
     echo "    roo --help"
     echo ""
     echo "  ${BOLD}Example:${NC}"
-    echo "    export OPENROUTER_API_KEY=sk-or-v1-..."
-    echo "    cd ~/my-project && roo \"What is this project?\""
+    echo "    export OPENAI_BASE_URL=http://127.0.0.1:8080/v1"
+    echo "    cd ~/my-project && roo --model qwen3-coder \"What is this project?\""
+    echo ""
+    echo "  ${BOLD}Doctor:${NC}"
+    echo "    roo doctor --runtime vllm-mlx"
     echo ""
 }
 

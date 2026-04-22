@@ -12,6 +12,7 @@ The direction is:
 - no Roo cloud auth commands in the supported CLI surface
 - `llama.cpp` and `vllm-mlx` as first-class runtimes
 - OpenAI-compatible and Anthropic-compatible endpoint support
+- unified observability for local runtimes using Prometheus scrapes normalized into an OpenTelemetry-aligned namespace
 
 The default provider contract is now local OpenAI-compatible inference. Remote
 providers like `openrouter` are explicit opt-in via `--provider` or saved config.
@@ -170,6 +171,28 @@ The CLI should not own model-serving telemetry for these runtimes. Use the
 metrics and observability surfaces exposed by `llama.cpp` and `vllm-mlx`
 themselves.
 
+The fork’s job is to unify those runtime-native signals into a consistent
+operator surface. The new `roo doctor` command probes health, model discovery,
+and `/metrics`, then normalizes runtime metrics into a stable
+`gen_ai.local.*` namespace for downstream OpenTelemetry collection or
+dashboards.
+
+### Local Runtime Doctor
+
+Use `roo doctor` to probe a local runtime profile with sensible loopback
+defaults:
+
+```bash
+# vllm-mlx / OpenAI-compatible default
+roo doctor --runtime vllm-mlx
+
+# llama.cpp / Anthropic-compatible default
+roo doctor --runtime llama.cpp --protocol anthropic
+
+# JSON output for automation
+roo doctor --runtime vllm-mlx --format json
+```
+
 ### First-Run Local Contract
 
 If you do not explicitly choose a provider, the CLI assumes a local/self-hosted
@@ -270,7 +293,8 @@ The target architecture is a CLI-native runtime. The current state is transition
 2. CLI-native paths handle command discovery, mode discovery, model discovery, settings, and session history directly.
 3. The interactive execution core is still in transition; the current backend activates the extension bundle and drives the returned API surface directly instead of using the fake webview transport.
 4. Workspace file search and autocomplete are already carved out into CLI-owned modules, so the bundle backend is no longer responsible for `@` file lookup behavior.
-5. The roadmap goal is still to replace that bundle-backed execution path with a fully CLI-native engine.
+5. Local runtime doctor/observability is CLI-owned. It probes health and metrics endpoints directly instead of relying on extension-side plumbing.
+6. The roadmap goal is still to replace the remaining bundle-backed execution path with a fully CLI-native engine.
 
 ## Development
 

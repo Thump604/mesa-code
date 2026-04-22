@@ -176,7 +176,12 @@ export async function run(promptArg: string | undefined, flagOptions: FlagOption
 		effectiveProtocol,
 		effectiveRuntime,
 	)
-	const effectiveBaseUrl = resolveConfiguredBaseUrl(flagOptions.baseUrl, settings, effectiveProtocol)
+	const effectiveBaseUrl = resolveConfiguredBaseUrl(
+		flagOptions.baseUrl,
+		settings,
+		effectiveProtocol,
+		effectiveRuntime,
+	)
 	const effectiveModel = resolveEffectiveModel(
 		flagOptions.model,
 		settings,

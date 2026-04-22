@@ -2,7 +2,7 @@ import { Command } from "commander"
 
 import { DEFAULT_FLAGS } from "@/types/constants.js"
 import { VERSION } from "@/lib/utils/version.js"
-import { run, listCommands, listModes, listModels, listSessions, upgrade } from "@/commands/index.js"
+import { run, listCommands, listModes, listModels, listSessions, doctor, upgrade } from "@/commands/index.js"
 
 const program = new Command()
 
@@ -131,6 +131,19 @@ program
 	.description("Upgrade Roo Code CLI to the latest version")
 	.action(async () => {
 		await runUpgradeAction(() => upgrade())
+	})
+
+program
+	.command("doctor")
+	.description("Probe a local runtime profile and normalize its observability surface")
+	.option("-k, --api-key <key>", "API key for the selected local endpoint")
+	.option("--provider <provider>", "API provider override for protocol resolution")
+	.option("--protocol <protocol>", "API standard for local/self-hosted endpoints (openai or anthropic)")
+	.option("--runtime <runtime>", "Local runtime profile (llama.cpp or vllm-mlx)")
+	.option("--base-url <url>", "Base URL for the local runtime endpoint")
+	.option("--format <format>", 'Output format: "text" (default) or "json"', "text")
+	.action(async (options: Parameters<typeof doctor>[0]) => {
+		await runListAction(() => doctor(options))
 	})
 
 program.parse()

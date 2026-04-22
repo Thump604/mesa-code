@@ -7,6 +7,11 @@ export const DEFAULT_FLAGS = {
 	consecutiveMistakeLimit: 10,
 }
 
+export const DEFAULT_LOCAL_BASE_URLS = {
+	openai: "http://127.0.0.1:8080/v1",
+	anthropic: "http://127.0.0.1:8081",
+} as const
+
 export const REASONING_EFFORTS = [...reasoningEffortsExtended, "unspecified", "disabled"]
 
 /**

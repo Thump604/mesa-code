@@ -100,6 +100,11 @@ describe("runtime-config", () => {
 				resolveConfiguredBaseUrl(undefined, { anthropicBaseUrl: "http://localhost:8081" }, "anthropic"),
 			).toBe("http://localhost:8081")
 		})
+
+		it("defaults runtime profiles to local loopback endpoints", () => {
+			expect(resolveConfiguredBaseUrl(undefined, {}, "openai", "vllm-mlx")).toBe("http://127.0.0.1:8080/v1")
+			expect(resolveConfiguredBaseUrl(undefined, {}, "anthropic", "llama.cpp")).toBe("http://127.0.0.1:8081")
+		})
 	})
 
 	describe("resolveEffectiveModel", () => {
