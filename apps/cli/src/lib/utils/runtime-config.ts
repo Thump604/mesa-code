@@ -130,8 +130,15 @@ export function resolveEffectiveModel(
 	if (flagModel) {
 		if ((provider === "openai" || provider === "anthropic") && shouldForceExplicitLocalModel) {
 			// The commander default is a hosted Anthropic model ID, which is the wrong
-			// contract for local/private runtime profiles.
-			return ""
+			// contract for local/private runtime profiles. Fall back to saved local model
+			// settings instead of treating the hosted default as an explicit local model.
+			if (provider === "openai") {
+				return settings.openAiModelId ?? settings.model ?? ""
+			}
+
+			if (provider === "anthropic") {
+				return settings.model ?? ""
+			}
 		}
 
 		return flagModel

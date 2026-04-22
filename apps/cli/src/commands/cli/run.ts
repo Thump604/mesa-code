@@ -34,6 +34,7 @@ import {
 	resolveEffectiveProvider,
 	resolveEffectiveRuntime,
 } from "@/lib/utils/runtime-config.js"
+import { resolveLiveLocalModel } from "@/lib/utils/live-model.js"
 import { runOnboarding } from "@/lib/utils/onboarding.js"
 import { validateTerminalShellPath } from "@/lib/utils/shell.js"
 import { getDefaultExtensionPath } from "@/lib/utils/extension.js"
@@ -233,6 +234,25 @@ export async function run(promptArg: string | undefined, flagOptions: FlagOption
 		runtimeAwareSettings.consecutiveMistakeLimit ??
 		DEFAULT_FLAGS.consecutiveMistakeLimit
 	const effectiveConsecutiveMistakeLimit = Number(rawConsecutiveMistakeLimit)
+	const configuredApiKey = resolveConfiguredApiKey(
+		effectiveProvider,
+		flagOptions.apiKey,
+		settings,
+		getApiKeyFromEnv(effectiveProvider),
+		effectiveBaseUrl,
+	)
+	const resolvedLocalModel = await resolveLiveLocalModel({
+		provider: effectiveProvider,
+		baseUrl: effectiveBaseUrl,
+		apiKey: configuredApiKey,
+		configuredModel: effectiveModel,
+		settings: runtimeAwareSettings,
+	})
+	const runtimeModel = resolvedLocalModel.model
+
+	if (resolvedLocalModel.warning) {
+		console.error(resolvedLocalModel.warning)
+	}
 
 	if (!Number.isInteger(effectiveConsecutiveMistakeLimit) || effectiveConsecutiveMistakeLimit < 0) {
 		console.error(
@@ -260,7 +280,7 @@ export async function run(promptArg: string | undefined, flagOptions: FlagOption
 		consecutiveMistakeLimit: effectiveConsecutiveMistakeLimit,
 		user: null,
 		provider: effectiveProvider,
-		model: effectiveModel,
+		model: runtimeModel,
 		baseUrl: effectiveBaseUrl,
 		workspacePath: effectiveWorkspacePath,
 		extensionPath: path.resolve(flagOptions.extension || getDefaultExtensionPath(__dirname)),
@@ -287,15 +307,7 @@ export async function run(promptArg: string | undefined, flagOptions: FlagOption
 		process.exit(1)
 	}
 
-	runtimeOptions.apiKey =
-		runtimeOptions.apiKey ||
-		resolveConfiguredApiKey(
-			runtimeOptions.provider,
-			flagOptions.apiKey,
-			settings,
-			getApiKeyFromEnv(runtimeOptions.provider),
-			runtimeOptions.baseUrl,
-		)
+	runtimeOptions.apiKey = runtimeOptions.apiKey || configuredApiKey
 
 	if ((runtimeOptions.provider === "openai" || runtimeOptions.provider === "anthropic") && !runtimeOptions.model) {
 		const providerLabel = effectiveRuntime

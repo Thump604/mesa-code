@@ -244,6 +244,8 @@ export class BundleApiCliRuntime implements CliRuntime {
 			return
 		}
 
+		const initialSettings = this.buildInitialSettings()
+
 		let storageDir: string | undefined
 		if (this.options.ephemeral) {
 			this.ephemeralStorageDir = await createEphemeralStorageDir()
@@ -251,7 +253,7 @@ export class BundleApiCliRuntime implements CliRuntime {
 		}
 
 		clearRuntimeConfig()
-		setRuntimeConfigValues("roo-cline", this.buildInitialSettings() as Record<string, unknown>)
+		setRuntimeConfigValues("roo-cline", initialSettings as Record<string, unknown>)
 
 		const { api, deactivate } = await this.deps.loadBundle({ ...this.options, storageDir })
 		this.api = api
@@ -262,6 +264,10 @@ export class BundleApiCliRuntime implements CliRuntime {
 		)
 
 		this.registerApiEventHandlers(api)
+		await api.setConfiguration({
+			...api.getConfiguration(),
+			...initialSettings,
+		})
 		await this.publishState({ includeMessages: true, includeTaskHistory: true })
 	}
 
