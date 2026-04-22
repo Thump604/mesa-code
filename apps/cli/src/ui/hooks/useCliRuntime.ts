@@ -3,8 +3,12 @@ import { useApp } from "ink"
 import { randomUUID } from "crypto"
 import type { ExtensionMessage } from "@roo-code/types"
 
-import type { CliRuntime, CliRuntimeOptions, CreateCliRuntime } from "@/runtime/index.js"
-import { resolveWorkspaceResumeSessionId } from "@/lib/task-history/index.js"
+import {
+	activateCliRuntimeSession,
+	type CliRuntime,
+	type CliRuntimeOptions,
+	type CreateCliRuntime,
+} from "@/runtime/index.js"
 
 import { useCLIStore } from "../store.js"
 
@@ -92,53 +96,51 @@ export function useCliRuntime({
 				runtimeRef.current = runtime
 				isReadyRef.current = true
 
-				runtime.onMessage((msg) => onRuntimeMessage(msg))
+				const initialLaunch = await activateCliRuntimeSession({
+					runtime,
+					initialLaunch: {
+						initialPrompt,
+						initialTaskId: pendingInitialTaskIdRef.current,
+						initialSessionId: requestedSessionId,
+						continueSession,
+					},
+					onMessage: onRuntimeMessage,
+					onTaskCompleted: async () => {
+						setComplete(true)
+						setLoading(false)
 
-				runtime.onTaskCompleted(async () => {
-					setComplete(true)
-					setLoading(false)
-
-					if (exitOnComplete) {
-						await cleanup()
-						exit()
-						setTimeout(() => process.exit(0), 100)
-					}
+						if (exitOnComplete) {
+							await cleanup()
+							exit()
+							setTimeout(() => process.exit(0), 100)
+						}
+					},
+					onError: (err: Error) => {
+						setError(err.message)
+						setLoading(false)
+					},
+					afterActivate: (activeRuntime) => {
+						activeRuntime.refreshCliMetadata()
+					},
 				})
 
-				runtime.onError((err: Error) => {
-					setError(err.message)
-					setLoading(false)
-				})
-
-				await runtime.activate()
-
-				runtime.refreshCliMetadata()
-
-				if (requestedSessionId || continueSession) {
-					const resolvedSessionId = resolveWorkspaceResumeSessionId(
-						await runtime.readTaskHistory(),
-						requestedSessionId,
-					)
-
-					if (resolvedSessionId) {
-						setCurrentTaskId(resolvedSessionId)
-						setIsResumingTask(true)
-						setHasStartedTask(true)
-						setLoading(true)
-						runtime.selectTask(resolvedSessionId)
-						return
-					}
+				if (initialLaunch.kind === "resume") {
+					setCurrentTaskId(initialLaunch.sessionId)
+					setIsResumingTask(true)
+					setHasStartedTask(true)
+					setLoading(true)
+					runtime.selectTask(initialLaunch.sessionId)
+					return
 				}
 
 				setLoading(false)
 
-				if (initialPrompt) {
+				if (initialLaunch.kind === "start") {
 					setHasStartedTask(true)
 					setLoading(true)
-					addMessage({ id: randomUUID(), role: "user", content: initialPrompt })
-					const taskId = pendingInitialTaskIdRef.current
+					addMessage({ id: randomUUID(), role: "user", content: initialLaunch.prompt })
 					pendingInitialTaskIdRef.current = undefined
-					await runtime.runTask(initialPrompt, taskId)
+					await runtime.runTask(initialLaunch.prompt, initialLaunch.taskId)
 				}
 			} catch (err) {
 				setError(err instanceof Error ? err.message : String(err))

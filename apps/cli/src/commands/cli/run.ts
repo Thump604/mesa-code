@@ -21,11 +21,16 @@ import {
 } from "@/types/index.js"
 import { isValidOutputFormat } from "@/types/json-events.js"
 import { JsonEventEmitter } from "@/agent/json-event-emitter.js"
-import { createCliRuntime, type CliRuntime, type CliRuntimeOptions } from "@/runtime/index.js"
+import {
+	activateCliRuntimeSession,
+	createCliRuntime,
+	executeInitialSessionLaunch,
+	type CliRuntime,
+	type CliRuntimeOptions,
+} from "@/runtime/index.js"
 
 import { getOpsModeContract, resolveOpsBaseUrl } from "@/lib/ops-control-plane.js"
 import { loadSettings } from "@/lib/storage/index.js"
-import { resolveWorkspaceResumeSessionId } from "@/lib/task-history/index.js"
 import { getEnvVarName, getApiKeyFromEnv } from "@/lib/utils/provider.js"
 import {
 	resolveConfiguredApiKey,
@@ -464,7 +469,6 @@ export async function run(promptArg: string | undefined, flagOptions: FlagOption
 
 		const runtime = createCliRuntime(runtimeOptions)
 		let streamRequestId: string | undefined
-		let resolvedResumeSessionId: string | undefined
 		let keepAliveInterval: NodeJS.Timeout | undefined
 		let isShuttingDown = false
 		let runtimeDisposed = false
@@ -627,26 +631,28 @@ export async function run(promptArg: string | undefined, flagOptions: FlagOption
 		process.on("unhandledRejection", onUnhandledRejection)
 
 		try {
-			await runtime.activate()
-
-			if (jsonEmitter) {
-				runtime.attachJsonEmitter(jsonEmitter)
-			}
-
-			if (isResumeRequested) {
-				resolvedResumeSessionId = resolveWorkspaceResumeSessionId(
-					await runtime.readTaskHistory(),
-					requestedSessionId,
-				)
-			}
+			const initialLaunch = await activateCliRuntimeSession({
+				runtime,
+				initialLaunch: {
+					initialPrompt: prompt,
+					initialTaskId: requestedCreateSessionId,
+					initialSessionId: requestedSessionId,
+					continueSession: shouldContinueSession,
+				},
+				afterActivate: (activeRuntime) => {
+					if (jsonEmitter) {
+						activeRuntime.attachJsonEmitter(jsonEmitter)
+					}
+				},
+			})
 
 			if (useStdinPromptStream) {
 				if (!jsonEmitter || outputFormat !== "stream-json") {
 					throw new Error("--stdin-prompt-stream requires --output-format=stream-json to emit control events")
 				}
 
-				if (isResumeRequested) {
-					await bootstrapResumeForStdinStream(runtime, resolvedResumeSessionId!)
+				if (initialLaunch.kind === "resume") {
+					await bootstrapResumeForStdinStream(runtime, initialLaunch.sessionId)
 				}
 
 				await runStdinStreamMode({
@@ -657,11 +663,7 @@ export async function run(promptArg: string | undefined, flagOptions: FlagOption
 					},
 				})
 			} else {
-				if (isResumeRequested) {
-					await runtime.resumeTask(resolvedResumeSessionId!)
-				} else {
-					await runtime.runTask(prompt!, requestedCreateSessionId)
-				}
+				await executeInitialSessionLaunch(runtime, initialLaunch)
 			}
 
 			await disposeRuntime()
