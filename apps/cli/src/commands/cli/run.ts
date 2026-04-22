@@ -21,6 +21,7 @@ import {
 } from "@/types/index.js"
 import { isValidOutputFormat } from "@/types/json-events.js"
 import { JsonEventEmitter } from "@/agent/json-event-emitter.js"
+import { TextSessionSurface } from "@/agent/text-session-surface.js"
 import { CliSessionController, createCliRuntime, type CliRuntime, type CliRuntimeOptions } from "@/runtime/index.js"
 
 import { getOpsModeContract, resolveOpsBaseUrl } from "@/lib/ops-control-plane.js"
@@ -471,9 +472,10 @@ export async function run(promptArg: string | undefined, flagOptions: FlagOption
 		const useJsonOutput = outputFormat === "json" || outputFormat === "stream-json"
 		const signalOnlyExit = flagOptions.signalOnlyExit
 
-		runtimeOptions.disableOutput = useJsonOutput
+		runtimeOptions.disableOutput = true
 
 		let sessionController: CliSessionController | null = null
+		let textSurface: TextSessionSurface | null = null
 		let streamRequestId: string | undefined
 		let keepAliveInterval: NodeJS.Timeout | undefined
 		let isShuttingDown = false
@@ -543,6 +545,10 @@ export async function run(promptArg: string | undefined, flagOptions: FlagOption
 			}
 
 			runtimeDisposed = true
+			if (textSurface) {
+				await textSurface.dispose()
+				textSurface = null
+			}
 			jsonEmitter?.detach()
 			await sessionController.cleanup()
 		}
@@ -658,7 +664,15 @@ export async function run(promptArg: string | undefined, flagOptions: FlagOption
 							)
 						}
 					: undefined,
-				afterActivate: () => {
+				afterActivate: (activeRuntime) => {
+					if (!useJsonOutput) {
+						textSurface = new TextSessionSurface(activeRuntime, {
+							nonInteractive: runtimeOptions.nonInteractive,
+							exitOnError: runtimeOptions.exitOnError,
+						})
+						textSurface.attach()
+					}
+
 					if (jsonEmitter) {
 						activeSessionController.attachJsonEmitter(jsonEmitter)
 					}

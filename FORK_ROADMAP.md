@@ -166,6 +166,7 @@ Goal: stop treating the CLI as a thin shell around the extension runtime.
 - use a terminal-native prompt profile so TUI and command/file flows are not burdened by editor-era universal skill checks or stop-after-every-tool instructions
 - share one runtime-backed session runner across TUI and non-interactive surfaces so `start`, `resume`, and `continue` create, resolve, and execute through the same contract
 - move lifecycle and action wiring behind a shared CLI session controller so TUI, print mode, and stdin-stream stop hand-owning separate runtime/disposal logic
+- move non-interactive text output and ask handling into an explicit CLI surface so the runtime backend stops doing hidden terminal I/O on behalf of print mode
 - move session storage and state handling into CLI-owned modules
 - replace extension-host mediated discovery and control paths with direct CLI-owned implementations
 - keep structured output modes stable: text, json, stream-json

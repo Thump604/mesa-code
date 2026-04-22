@@ -15,7 +15,6 @@
  */
 
 import {
-	type WebviewMessage,
 	type ClineMessage,
 	type ClineAsk,
 	type ClineAskResponse,
@@ -50,9 +49,9 @@ export interface AskDispatcherOptions {
 	promptManager: PromptManager
 
 	/**
-	 * Callback to send responses to the extension.
+	 * Callback to send responses to the agent runtime.
 	 */
-	sendMessage: (message: WebviewMessage) => void
+	sendAskResponse: (response: ClineAskResponse, text?: string) => void
 
 	/**
 	 * Whether running in non-interactive mode (auto-approve).
@@ -90,7 +89,7 @@ export interface AskHandleResult {
 export class AskDispatcher {
 	private outputManager: OutputManager
 	private promptManager: PromptManager
-	private sendMessage: (message: WebviewMessage) => void
+	private sendAskResponse: (response: ClineAskResponse, text?: string) => void
 	private nonInteractive: boolean
 	private exitOnError: boolean
 	private disabled: boolean
@@ -104,7 +103,7 @@ export class AskDispatcher {
 	constructor(options: AskDispatcherOptions) {
 		this.outputManager = options.outputManager
 		this.promptManager = options.promptManager
-		this.sendMessage = options.sendMessage
+		this.sendAskResponse = options.sendAskResponse
 		this.nonInteractive = options.nonInteractive ?? false
 		this.exitOnError = options.exitOnError ?? false
 		this.disabled = options.disabled ?? false
@@ -630,17 +629,14 @@ export class AskDispatcher {
 	 * Send a followup response (text answer) to the extension.
 	 */
 	private sendFollowupResponse(text: string): void {
-		this.sendMessage({ type: "askResponse", askResponse: "messageResponse", text })
+		this.sendAskResponse("messageResponse", text)
 	}
 
 	/**
 	 * Send an approval response (yes/no) to the extension.
 	 */
 	private sendApprovalResponse(approved: boolean): void {
-		this.sendMessage({
-			type: "askResponse",
-			askResponse: approved ? "yesButtonClicked" : "noButtonClicked",
-		})
+		this.sendAskResponse(approved ? "yesButtonClicked" : "noButtonClicked")
 	}
 
 	/**

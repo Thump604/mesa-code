@@ -33,9 +33,6 @@ import type { AgentStateInfo } from "@/agent/agent-state.js"
 import type { TaskCompletedEvent } from "@/agent/events.js"
 import { ExtensionClient } from "@/agent/extension-client.js"
 import type { JsonEventEmitter } from "@/agent/json-event-emitter.js"
-import { OutputManager } from "@/agent/output-manager.js"
-import { PromptManager } from "@/agent/prompt-manager.js"
-import { AskDispatcher } from "@/agent/ask-dispatcher.js"
 import { searchWorkspaceFiles, type FileSearchResult, type SearchWorkspaceFilesOptions } from "@/runtime/file-search.js"
 
 import type { CliRuntime, CliRuntimeOptions } from "./runtime.js"
@@ -171,11 +168,9 @@ export class BundleApiCliRuntime implements CliRuntime {
 	private readonly options: CliRuntimeOptions
 	private readonly deps: BundleRuntimeDeps
 	private readonly client: ExtensionClient
-	private readonly outputManager: OutputManager
-	private readonly promptManager: PromptManager
-	private readonly askDispatcher: AskDispatcher
 	private readonly runtimeMessageListeners = new Set<RuntimeMessageListener>()
 	private readonly runtimeErrorListeners = new Set<RuntimeErrorListener>()
+	private readonly loggedFirstPartials = new Set<number>()
 
 	private api: BundleApi | null = null
 	private deactivateBundle: (() => Promise<void>) | undefined
@@ -210,22 +205,6 @@ export class BundleApiCliRuntime implements CliRuntime {
 			sendMessage: (message) => this.sendToRuntime(message),
 			debug: options.debug,
 		})
-
-		this.outputManager = new OutputManager({ disabled: options.disableOutput })
-		this.promptManager = new PromptManager({
-			onBeforePrompt: () => this.restoreConsole(),
-			onAfterPrompt: () => this.setupQuietMode(),
-		})
-		this.askDispatcher = new AskDispatcher({
-			outputManager: this.outputManager,
-			promptManager: this.promptManager,
-			sendMessage: (message) => this.sendToRuntime(message),
-			nonInteractive: options.nonInteractive,
-			exitOnError: options.exitOnError,
-			disabled: options.disableOutput,
-		})
-
-		this.setupClientEventHandlers()
 	}
 
 	async activate(): Promise<void> {
@@ -376,9 +355,8 @@ export class BundleApiCliRuntime implements CliRuntime {
 	}
 
 	async dispose(): Promise<void> {
-		this.outputManager.clear()
-		this.askDispatcher.clear()
 		this.client.reset()
+		this.loggedFirstPartials.clear()
 
 		if (this.deactivateBundle) {
 			try {
@@ -412,34 +390,6 @@ export class BundleApiCliRuntime implements CliRuntime {
 		} else {
 			process.env.ROO_CLI_RUNTIME = this.previousCliRuntimeEnv
 		}
-	}
-
-	private setupClientEventHandlers(): void {
-		this.client.on("message", (message: ClineMessage) => {
-			this.logMessageDebug(message, "new")
-			this.outputManager.outputMessage(message)
-		})
-
-		this.client.on("messageUpdated", (message: ClineMessage) => {
-			this.logMessageDebug(message, "updated")
-			this.outputManager.outputMessage(message)
-		})
-
-		this.client.on("waitingForInput", (event) => {
-			if (this.options.disableOutput) {
-				this.upsertCurrentMessage(event.message)
-				void this.publishState({ includeMessages: true, includeTaskHistory: false })
-				return
-			}
-
-			void this.askDispatcher.handleAsk(event.message)
-		})
-
-		this.client.on("taskCompleted", (event) => {
-			if (event.message && event.message.type === "ask" && event.message.ask === "completion_result") {
-				this.outputManager.outputCompletionResult(event.message.ts, event.message.text || "")
-			}
-		})
 	}
 
 	private registerApiEventHandlers(api: BundleApi): void {
@@ -881,8 +831,8 @@ export class BundleApiCliRuntime implements CliRuntime {
 
 	private logMessageDebug(message: ClineMessage, type: "new" | "updated"): void {
 		if (message.partial) {
-			if (!this.outputManager.hasLoggedFirstPartial(message.ts)) {
-				this.outputManager.setLoggedFirstPartial(message.ts)
+			if (!this.loggedFirstPartials.has(message.ts)) {
+				this.loggedFirstPartials.add(message.ts)
 				cliLogger.debug("message:start", { ts: message.ts, type: message.say || message.ask })
 			}
 			return
@@ -892,6 +842,6 @@ export class BundleApiCliRuntime implements CliRuntime {
 			ts: message.ts,
 			type: message.say || message.ask,
 		})
-		this.outputManager.clearLoggedFirstPartial(message.ts)
+		this.loggedFirstPartials.delete(message.ts)
 	}
 }

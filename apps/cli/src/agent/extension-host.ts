@@ -211,7 +211,12 @@ export class ExtensionHost extends EventEmitter implements ExtensionHostInterfac
 		this.askDispatcher = new AskDispatcher({
 			outputManager: this.outputManager,
 			promptManager: this.promptManager,
-			sendMessage: (msg) => this.sendToExtension(msg),
+			sendAskResponse: (response, text) =>
+				this.sendToExtension({
+					type: "askResponse",
+					askResponse: response,
+					...(text !== undefined ? { text } : {}),
+				}),
 			nonInteractive: options.nonInteractive,
 			exitOnError: options.exitOnError,
 			disabled: options.disableOutput, // TUI mode handles asks directly.
