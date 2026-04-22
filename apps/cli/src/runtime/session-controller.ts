@@ -1,3 +1,7 @@
+import type { ClineAsk, ExtensionMessage, RooCodeSettings } from "@roo-code/types"
+
+import type { AgentStateInfo } from "@/agent/agent-state.js"
+import type { TaskCompletedEvent } from "@/agent/events.js"
 import type { JsonEventEmitter } from "@/agent/json-event-emitter.js"
 
 import type { CliRuntime, CliRuntimeOptions, CreateCliRuntime } from "./runtime.js"
@@ -60,8 +64,8 @@ export class CliSessionController {
 		return this.launch
 	}
 
-	startTask(prompt: string, taskId?: string): Promise<void> {
-		return this.getRuntimeOrThrow().startTask(prompt, taskId)
+	startTask(prompt: string, taskId?: string, configuration?: RooCodeSettings, images?: string[]): Promise<void> {
+		return this.getRuntimeOrThrow().startTask(prompt, taskId, configuration, images)
 	}
 
 	showTask(taskId: string): Promise<void> {
@@ -72,8 +76,20 @@ export class CliSessionController {
 		return this.getRuntimeOrThrow().waitForTaskCompletion()
 	}
 
-	runTask(prompt: string, taskId?: string): Promise<void> {
-		return this.startTask(prompt, taskId).then(() => this.waitForTaskCompletion())
+	runTask(prompt: string, taskId?: string, configuration?: RooCodeSettings, images?: string[]): Promise<void> {
+		return this.startTask(prompt, taskId, configuration, images).then(() => this.waitForTaskCompletion())
+	}
+
+	onMessage(listener: (message: ExtensionMessage) => void): () => void {
+		return this.getRuntimeOrThrow().onMessage(listener)
+	}
+
+	onTaskCompleted(listener: (event: TaskCompletedEvent) => void): () => void {
+		return this.getRuntimeOrThrow().onTaskCompleted(listener)
+	}
+
+	onError(listener: (error: Error) => void): () => void {
+		return this.getRuntimeOrThrow().onError(listener)
 	}
 
 	refreshCliMetadata(): void {
@@ -122,6 +138,22 @@ export class CliSessionController {
 
 	attachJsonEmitter(emitter: JsonEventEmitter): void {
 		this.getRuntimeOrThrow().attachJsonEmitter(emitter)
+	}
+
+	getAgentState(): AgentStateInfo {
+		return this.getRuntimeOrThrow().getAgentState()
+	}
+
+	isWaitingForInput(): boolean {
+		return this.getRuntimeOrThrow().isWaitingForInput()
+	}
+
+	hasActiveTask(): boolean {
+		return this.getRuntimeOrThrow().hasActiveTask()
+	}
+
+	getCurrentAsk(): ClineAsk | undefined {
+		return this.getRuntimeOrThrow().getCurrentAsk()
 	}
 
 	async cleanup(): Promise<void> {

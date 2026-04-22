@@ -40,7 +40,8 @@ Task launch and task completion are now also separate runtime concerns, so the
 TUI can start or reattach to work without inheriting print-mode "block until
 the task ends" semantics from the backend. The stdin-stream control path now
 uses that same explicit launch/show/wait split instead of relying on a hidden
-combined task primitive.
+combined task primitive, and it now drives through the shared CLI session
+controller instead of binding directly to the runtime backend.
 The remaining non-interactive shell loop now also lives in a dedicated CLI
 runner instead of being inlined inside `run.ts`, so signal handling, cleanup,
 JSON emitter attachment, and stdin-stream settlement are owned by one module.

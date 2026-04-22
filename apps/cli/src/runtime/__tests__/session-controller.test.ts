@@ -20,9 +20,9 @@ function createRuntimeHarness(taskHistory = [{ id: "latest", task: "task", ts: 1
 		queueMessage: vi.fn(),
 		approve: vi.fn(),
 		reject: vi.fn(),
-		onMessage: vi.fn(),
-		onTaskCompleted: vi.fn(),
-		onError: vi.fn(),
+		onMessage: vi.fn().mockReturnValue(vi.fn()),
+		onTaskCompleted: vi.fn().mockReturnValue(vi.fn()),
+		onError: vi.fn().mockReturnValue(vi.fn()),
 		attachJsonEmitter: vi.fn(),
 		readTaskHistory: vi.fn().mockResolvedValue(taskHistory),
 		getRuntimeOptions: vi.fn().mockReturnValue({
@@ -63,6 +63,9 @@ describe("CliSessionController", () => {
 			},
 		})
 		const onStart = vi.fn().mockResolvedValue(undefined)
+		const onMessage = vi.fn()
+		const onTaskCompleted = vi.fn()
+		const onError = vi.fn()
 
 		await expect(
 			controller.start({
@@ -86,9 +89,12 @@ describe("CliSessionController", () => {
 		})
 
 		controller.refreshCliMetadata()
-		await controller.startTask("Summarize", "task-456")
+		await controller.startTask("Summarize", "task-456", { autoApprovalEnabled: true }, ["image.png"])
 		await controller.showTask("task-123")
 		await controller.waitForTaskCompletion()
+		const disposeMessage = controller.onMessage(onMessage)
+		const disposeTaskCompleted = controller.onTaskCompleted(onTaskCompleted)
+		const disposeError = controller.onError(onError)
 		controller.selectTask("task-123")
 		controller.setMode("architect")
 		controller.searchFiles("@runtime")
@@ -99,9 +105,14 @@ describe("CliSessionController", () => {
 		controller.reject()
 		controller.cancelTask()
 
-		expect(runtime.startTask).toHaveBeenCalledWith("Summarize", "task-456")
+		expect(runtime.startTask).toHaveBeenCalledWith("Summarize", "task-456", { autoApprovalEnabled: true }, [
+			"image.png",
+		])
 		expect(runtime.showTask).toHaveBeenCalledWith("task-123")
 		expect(runtime.waitForTaskCompletion).toHaveBeenCalledOnce()
+		expect(runtime.onMessage).toHaveBeenCalledWith(onMessage)
+		expect(runtime.onTaskCompleted).toHaveBeenCalledWith(onTaskCompleted)
+		expect(runtime.onError).toHaveBeenCalledWith(onError)
 		expect(runtime.refreshCliMetadata).toHaveBeenCalledOnce()
 		expect(runtime.selectTask).toHaveBeenCalledWith("task-123")
 		expect(runtime.setMode).toHaveBeenCalledWith("architect")
@@ -112,7 +123,18 @@ describe("CliSessionController", () => {
 		expect(runtime.approve).toHaveBeenCalledOnce()
 		expect(runtime.reject).toHaveBeenCalledOnce()
 		expect(runtime.cancelTask).toHaveBeenCalledOnce()
+		expect(controller.getAgentState()).toEqual({
+			isWaitingForInput: false,
+			currentAsk: undefined,
+			hasActiveTask: false,
+		})
+		expect(controller.isWaitingForInput()).toBe(false)
+		expect(controller.hasActiveTask()).toBe(false)
+		expect(controller.getCurrentAsk()).toBeUndefined()
 
+		disposeMessage()
+		disposeTaskCompleted()
+		disposeError()
 		await controller.cleanup()
 		await controller.cleanup()
 

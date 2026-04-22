@@ -10,7 +10,7 @@ import {
 
 import { isRecord } from "@/lib/utils/guards.js"
 import { isValidSessionId } from "@/lib/utils/session-id.js"
-import type { CliRuntime } from "@/runtime/index.js"
+import type { CliSessionController } from "@/runtime/index.js"
 import { isCancellationLikeError, isExpectedControlFlowError, isNoActiveTaskLikeError } from "./cancellation.js"
 
 import type { JsonEventEmitter } from "@/agent/json-event-emitter.js"
@@ -228,7 +228,7 @@ function areStringArraysEqual(a: string[], b: string[]): boolean {
 // ---------------------------------------------------------------------------
 
 export interface StdinStreamModeOptions {
-	runtime: CliRuntime
+	sessionController: CliSessionController
 	jsonEmitter: JsonEventEmitter
 	setStreamRequestId: (id: string | undefined) => void
 }
@@ -255,8 +255,8 @@ export function shouldSendMessageAsAskResponse(waitingForInput: boolean, current
 	return waitingForInput && typeof currentAsk === "string" && MESSAGE_AS_ASK_RESPONSE_ASKS.has(currentAsk)
 }
 
-function isResumableState(runtime: CliRuntime): boolean {
-	const agentState = runtime.getAgentState()
+function isResumableState(sessionController: Pick<CliSessionController, "getAgentState">): boolean {
+	const agentState = sessionController.getAgentState()
 	return (
 		agentState.isWaitingForInput &&
 		typeof agentState.currentAsk === "string" &&
@@ -264,11 +264,13 @@ function isResumableState(runtime: CliRuntime): boolean {
 	)
 }
 
-async function waitForPostCancelRecovery(runtime: CliRuntime): Promise<void> {
+async function waitForPostCancelRecovery(
+	sessionController: Pick<CliSessionController, "getAgentState">,
+): Promise<void> {
 	const deadline = Date.now() + CANCEL_RECOVERY_WAIT_TIMEOUT_MS
 
 	while (Date.now() < deadline) {
-		if (isResumableState(runtime)) {
+		if (isResumableState(sessionController)) {
 			return
 		}
 
@@ -277,11 +279,11 @@ async function waitForPostCancelRecovery(runtime: CliRuntime): Promise<void> {
 }
 
 async function waitForTaskProgressAfterStdinClosed(
-	runtime: CliRuntime,
+	sessionController: Pick<CliSessionController, "hasActiveTask" | "isWaitingForInput" | "getCurrentAsk">,
 	getQueueState: () => { hasSeenQueueState: boolean; queueDepth: number },
 ): Promise<void> {
-	while (runtime.hasActiveTask()) {
-		if (!runtime.isWaitingForInput()) {
+	while (sessionController.hasActiveTask()) {
+		if (!sessionController.isWaitingForInput()) {
 			await new Promise((resolve) => setTimeout(resolve, STDIN_EOF_POLL_INTERVAL_MS))
 			continue
 		}
@@ -289,15 +291,15 @@ async function waitForTaskProgressAfterStdinClosed(
 		const deadline = Date.now() + STDIN_EOF_RESUME_WAIT_TIMEOUT_MS
 
 		while (Date.now() < deadline) {
-			if (!runtime.hasActiveTask() || !runtime.isWaitingForInput()) {
+			if (!sessionController.hasActiveTask() || !sessionController.isWaitingForInput()) {
 				break
 			}
 
 			await new Promise((resolve) => setTimeout(resolve, STDIN_EOF_POLL_INTERVAL_MS))
 		}
 
-		if (runtime.hasActiveTask() && runtime.isWaitingForInput()) {
-			const currentAsk = runtime.getCurrentAsk()
+		if (sessionController.hasActiveTask() && sessionController.isWaitingForInput()) {
+			const currentAsk = sessionController.getCurrentAsk()
 			const { hasSeenQueueState, queueDepth } = getQueueState()
 
 			// EOF is allowed when the task has reached an idle completion boundary and
@@ -312,12 +314,12 @@ async function waitForTaskProgressAfterStdinClosed(
 				for (let i = 1; i < STDIN_EOF_IDLE_STABLE_POLLS; i++) {
 					await new Promise((resolve) => setTimeout(resolve, STDIN_EOF_POLL_INTERVAL_MS))
 
-					if (!runtime.hasActiveTask() || !runtime.isWaitingForInput()) {
+					if (!sessionController.hasActiveTask() || !sessionController.isWaitingForInput()) {
 						isStable = false
 						break
 					}
 
-					const nextAsk = runtime.getCurrentAsk()
+					const nextAsk = sessionController.getCurrentAsk()
 					const nextQueueState = getQueueState()
 					if (
 						nextAsk !== currentAsk ||
@@ -339,7 +341,11 @@ async function waitForTaskProgressAfterStdinClosed(
 	}
 }
 
-export async function runStdinStreamMode({ runtime, jsonEmitter, setStreamRequestId }: StdinStreamModeOptions) {
+export async function runStdinStreamMode({
+	sessionController,
+	jsonEmitter,
+	setStreamRequestId,
+}: StdinStreamModeOptions) {
 	let hasReceivedStdinCommand = false
 	let shouldShutdown = false
 	let activeTaskPromise: Promise<void> | null = null
@@ -402,7 +408,7 @@ export async function runStdinStreamMode({ runtime, jsonEmitter, setStreamReques
 		}
 	}
 
-	const offClientError = runtime.onError((error) => {
+	const offClientError = sessionController.onError((error) => {
 		if (
 			isExpectedControlFlowError(error, {
 				stdinStreamMode: true,
@@ -566,9 +572,9 @@ export async function runStdinStreamMode({ runtime, jsonEmitter, setStreamReques
 		lastQueueMessageIds = queueMessageIds
 	}
 
-	const offRuntimeMessage = runtime.onMessage(onExtensionMessage)
+	const offRuntimeMessage = sessionController.onMessage(onExtensionMessage)
 
-	const offTaskCompleted = runtime.onTaskCompleted((event) => {
+	const offTaskCompleted = sessionController.onTaskCompleted((event) => {
 		if (activeTaskCommand === "start") {
 			const completionCode = event.success
 				? "task_completed"
@@ -621,11 +627,11 @@ export async function runStdinStreamMode({ runtime, jsonEmitter, setStreamReques
 					// Wait for full settlement to avoid false "task_busy" on immediate next start.
 					// Safe from races: `for await` processes stdin commands serially, so no
 					// concurrent command can mutate state between the check and the await.
-					if (activeTaskPromise && !runtime.hasActiveTask()) {
+					if (activeTaskPromise && !sessionController.hasActiveTask()) {
 						await waitForPreviousTaskToSettle()
 					}
 
-					if (activeTaskPromise || runtime.hasActiveTask()) {
+					if (activeTaskPromise || sessionController.hasActiveTask()) {
 						jsonEmitter.emitControl({
 							subtype: "error",
 							requestId: stdinCommand.requestId,
@@ -664,9 +670,9 @@ export async function runStdinStreamMode({ runtime, jsonEmitter, setStreamReques
 						...(stdinCommand.configuration ?? {}),
 					}
 
-					activeTaskPromise = runtime
+					activeTaskPromise = sessionController
 						.startTask(stdinCommand.prompt, latestTaskId, taskConfiguration, stdinCommand.images)
-						.then(() => runtime.waitForTaskCompletion())
+						.then(() => sessionController.waitForTaskCompletion())
 						.catch((error) => {
 							const message = error instanceof Error ? error.message : String(error)
 
@@ -727,17 +733,17 @@ export async function runStdinStreamMode({ runtime, jsonEmitter, setStreamReques
 					// If cancel was requested, wait briefly for the task to be rehydrated
 					// so message prompts don't race into the pre-cancel task instance.
 					if (awaitingPostCancelRecovery) {
-						await waitForPostCancelRecovery(runtime)
+						await waitForPostCancelRecovery(sessionController)
 					}
 
-					const wasResumable = isResumableState(runtime)
-					const currentAsk = runtime.getCurrentAsk()
+					const wasResumable = isResumableState(sessionController)
+					const currentAsk = sessionController.getCurrentAsk()
 					const shouldSendAsAskResponse = shouldSendMessageAsAskResponse(
-						runtime.isWaitingForInput(),
+						sessionController.isWaitingForInput(),
 						currentAsk,
 					)
 
-					if (!runtime.hasActiveTask()) {
+					if (!sessionController.hasActiveTask()) {
 						jsonEmitter.emitControl({
 							subtype: "error",
 							requestId: stdinCommand.requestId,
@@ -763,7 +769,7 @@ export async function runStdinStreamMode({ runtime, jsonEmitter, setStreamReques
 
 					if (shouldSendAsAskResponse) {
 						// Match webview behavior: if there is an active ask, route message directly as an ask response.
-						runtime.sendTaskMessage(stdinCommand.prompt, stdinCommand.images)
+						sessionController.sendTaskMessage(stdinCommand.prompt, stdinCommand.images)
 
 						setStreamRequestId(stdinCommand.requestId)
 						jsonEmitter.emitControl({
@@ -779,9 +785,9 @@ export async function runStdinStreamMode({ runtime, jsonEmitter, setStreamReques
 						break
 					}
 
-					runtime.queueMessage(stdinCommand.prompt, stdinCommand.images)
+					sessionController.queueMessage(stdinCommand.prompt, stdinCommand.images)
 					pendingQueuedMessageRequestIds.push(stdinCommand.requestId)
-					if (runtime.isWaitingForInput()) {
+					if (sessionController.isWaitingForInput()) {
 						setStreamRequestId(stdinCommand.requestId)
 					}
 
@@ -803,7 +809,7 @@ export async function runStdinStreamMode({ runtime, jsonEmitter, setStreamReques
 					setStreamRequestId(stdinCommand.requestId)
 
 					const hasTaskInFlight = Boolean(
-						activeTaskPromise || activeTaskCommand === "start" || runtime.hasActiveTask(),
+						activeTaskPromise || activeTaskCommand === "start" || sessionController.hasActiveTask(),
 					)
 
 					if (!hasTaskInFlight) {
@@ -838,13 +844,15 @@ export async function runStdinStreamMode({ runtime, jsonEmitter, setStreamReques
 						requestId: stdinCommand.requestId,
 						command: "cancel",
 						taskId: latestTaskId,
-						content: runtime.hasActiveTask() ? "cancel requested" : "cancel requested (task starting)",
+						content: sessionController.hasActiveTask()
+							? "cancel requested"
+							: "cancel requested (task starting)",
 						code: "accepted",
 						success: true,
 					})
 
 					try {
-						runtime.cancelTask()
+						sessionController.cancelTask()
 
 						jsonEmitter.emitControl({
 							subtype: "done",
@@ -950,15 +958,15 @@ export async function runStdinStreamMode({ runtime, jsonEmitter, setStreamReques
 			throw new Error("no stdin command provided")
 		}
 
-		if (shouldShutdown && runtime.hasActiveTask()) {
-			runtime.cancelTask()
+		if (shouldShutdown && sessionController.hasActiveTask()) {
+			sessionController.cancelTask()
 		}
 
 		if (!shouldShutdown) {
 			if (activeTaskPromise) {
 				await activeTaskPromise
-			} else if (runtime.hasActiveTask()) {
-				await waitForTaskProgressAfterStdinClosed(runtime, () => ({
+			} else if (sessionController.hasActiveTask()) {
+				await waitForTaskProgressAfterStdinClosed(sessionController, () => ({
 					hasSeenQueueState,
 					queueDepth: lastQueueDepth,
 				}))

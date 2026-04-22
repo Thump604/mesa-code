@@ -243,7 +243,7 @@ export async function runNonInteractiveCliSession({
 			bootstrapResumeForStdinStream,
 		})
 
-		const startedSession = await activeSessionController.start(
+		await activeSessionController.start(
 			createSessionLifecycleStartOptions(activeSessionController, sessionLifecycle, {
 				initialPrompt: prompt,
 				initialTaskId: requestedCreateSessionId,
@@ -258,7 +258,7 @@ export async function runNonInteractiveCliSession({
 			}
 
 			await runStdinStreamMode({
-				runtime: startedSession.runtime,
+				sessionController: activeSessionController,
 				jsonEmitter,
 				setStreamRequestId: (id) => {
 					streamRequestId = id
