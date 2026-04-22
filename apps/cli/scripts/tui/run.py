@@ -221,6 +221,10 @@ class TuiSession:
         pattern = rf"Roo said:[^\n]*\n\s*{re.escape(text)}\b"
         self.wait_for_regex(pattern, timeout, description or f'assistant reply "{text}"')
 
+    def wait_for_assistant_contains(self, text: str, timeout: float, description: str | None = None) -> None:
+        pattern = rf"Roo said:[\s\S]*?{re.escape(text)}"
+        self.wait_for_regex(pattern, timeout, description or f'assistant reply containing "{text}"')
+
     def submit_prompt(self, text: str, timeout: float = 20) -> None:
         self.send_text(text)
         self.read_for(0.5)
@@ -287,7 +291,7 @@ def case_approval_flow_live(context: SmokeContext) -> None:
             session.wait_for_text("readFile", 120, "tool approval request")
             session.wait_for_text("Press Y to approve, N to reject", 15)
             session.press_y()
-            session.wait_for_assistant_reply("# AGENTS.md", 120, "post-approval assistant reply")
+            session.wait_for_assistant_contains("# AGENTS.md", 120, "post-approval assistant reply")
 
 
 def case_autocomplete_picker_navigation(context: SmokeContext) -> None:

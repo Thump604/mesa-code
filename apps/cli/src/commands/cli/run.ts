@@ -21,7 +21,7 @@ import {
 } from "@/types/index.js"
 import { isValidOutputFormat } from "@/types/json-events.js"
 import { JsonEventEmitter } from "@/agent/json-event-emitter.js"
-import { createCliRuntime, startCliRuntimeSession, type CliRuntime, type CliRuntimeOptions } from "@/runtime/index.js"
+import { CliSessionController, createCliRuntime, type CliRuntime, type CliRuntimeOptions } from "@/runtime/index.js"
 
 import { getOpsModeContract, resolveOpsBaseUrl } from "@/lib/ops-control-plane.js"
 import { loadSettings } from "@/lib/storage/index.js"
@@ -473,7 +473,7 @@ export async function run(promptArg: string | undefined, flagOptions: FlagOption
 
 		runtimeOptions.disableOutput = useJsonOutput
 
-		let runtime: CliRuntime | null = null
+		let sessionController: CliSessionController | null = null
 		let streamRequestId: string | undefined
 		let keepAliveInterval: NodeJS.Timeout | undefined
 		let isShuttingDown = false
@@ -538,13 +538,13 @@ export async function run(promptArg: string | undefined, flagOptions: FlagOption
 		}
 
 		const disposeRuntime = async () => {
-			if (runtimeDisposed || !runtime) {
+			if (runtimeDisposed || !sessionController) {
 				return
 			}
 
 			runtimeDisposed = true
 			jsonEmitter?.detach()
-			await runtime.dispose()
+			await sessionController.cleanup()
 		}
 
 		const onSigint = () => {
@@ -637,12 +637,13 @@ export async function run(promptArg: string | undefined, flagOptions: FlagOption
 		process.on("unhandledRejection", onUnhandledRejection)
 
 		try {
-			const startedSession = await startCliRuntimeSession({
+			sessionController = new CliSessionController({
 				createCliRuntime,
 				runtimeOptions,
-				afterCreate: (createdRuntime) => {
-					runtime = createdRuntime
-				},
+			})
+			const activeSessionController = sessionController
+
+			const startedSession = await activeSessionController.start({
 				initialLaunch: {
 					initialPrompt: prompt,
 					initialTaskId: requestedCreateSessionId,
@@ -651,12 +652,15 @@ export async function run(promptArg: string | undefined, flagOptions: FlagOption
 				},
 				onResume: useStdinPromptStream
 					? async (launch) => {
-							await bootstrapResumeForStdinStream(runtime!, launch.sessionId)
+							await bootstrapResumeForStdinStream(
+								activeSessionController.getRuntimeOrThrow(),
+								launch.sessionId,
+							)
 						}
 					: undefined,
-				afterActivate: (activeRuntime) => {
+				afterActivate: () => {
 					if (jsonEmitter) {
-						activeRuntime.attachJsonEmitter(jsonEmitter)
+						activeSessionController.attachJsonEmitter(jsonEmitter)
 					}
 				},
 			})

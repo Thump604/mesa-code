@@ -3,12 +3,7 @@ import { useApp } from "ink"
 import { randomUUID } from "crypto"
 import type { ExtensionMessage } from "@roo-code/types"
 
-import {
-	startCliRuntimeSession,
-	type CliRuntime,
-	type CliRuntimeOptions,
-	type CreateCliRuntime,
-} from "@/runtime/index.js"
+import { CliSessionController, type CliRuntimeOptions, type CreateCliRuntime } from "@/runtime/index.js"
 
 import { useCLIStore } from "../store.js"
 
@@ -64,24 +59,23 @@ export function useCliRuntime({
 	const { addMessage, setComplete, setLoading, setHasStartedTask, setError, setCurrentTaskId, setIsResumingTask } =
 		useCLIStore()
 
-	const runtimeRef = useRef<CliRuntime | null>(null)
+	const sessionControllerRef = useRef<CliSessionController | null>(null)
 	const isReadyRef = useRef(false)
 	const pendingInitialTaskIdRef = useRef<string | undefined>(initialTaskId?.trim() || undefined)
 
 	const cleanup = useCallback(async () => {
-		if (runtimeRef.current) {
-			await runtimeRef.current.dispose()
-			runtimeRef.current = null
-			isReadyRef.current = false
-		}
+		const sessionController = sessionControllerRef.current
+		sessionControllerRef.current = null
+		isReadyRef.current = false
+
+		await sessionController?.cleanup()
 	}, [])
 
 	useEffect(() => {
 		const init = async () => {
 			try {
 				const requestedSessionId = initialSessionId?.trim()
-
-				await startCliRuntimeSession({
+				const sessionController = new CliSessionController({
 					createCliRuntime,
 					runtimeOptions: {
 						mode,
@@ -102,10 +96,10 @@ export function useCliRuntime({
 						exitOnError,
 						disableOutput: true,
 					},
-					afterCreate: (createdRuntime) => {
-						runtimeRef.current = createdRuntime
-						isReadyRef.current = true
-					},
+				})
+				sessionControllerRef.current = sessionController
+
+				await sessionController.start({
 					initialLaunch: {
 						initialPrompt,
 						initialTaskId: pendingInitialTaskIdRef.current,
@@ -127,38 +121,29 @@ export function useCliRuntime({
 						setError(err.message)
 						setLoading(false)
 					},
-					afterActivate: (activeRuntime) => {
-						activeRuntime.refreshCliMetadata()
+					afterActivate: () => {
+						sessionController.refreshCliMetadata()
 					},
 					onIdle: () => {
 						setLoading(false)
 					},
 					onResume: async (launch) => {
-						const activeRuntime = runtimeRef.current
-						if (!activeRuntime) {
-							throw new Error("CLI runtime not ready")
-						}
-
 						setCurrentTaskId(launch.sessionId)
 						setIsResumingTask(true)
 						setHasStartedTask(true)
 						setLoading(true)
-						activeRuntime.selectTask(launch.sessionId)
+						sessionController.selectTask(launch.sessionId)
 					},
 					onStart: async (launch) => {
-						const activeRuntime = runtimeRef.current
-						if (!activeRuntime) {
-							throw new Error("CLI runtime not ready")
-						}
-
 						setLoading(false)
 						setHasStartedTask(true)
 						setLoading(true)
 						addMessage({ id: randomUUID(), role: "user", content: launch.prompt })
 						pendingInitialTaskIdRef.current = undefined
-						await activeRuntime.runTask(launch.prompt, launch.taskId)
+						await sessionController.runTask(launch.prompt, launch.taskId)
 					},
 				})
+				isReadyRef.current = true
 			} catch (err) {
 				setError(err instanceof Error ? err.message : String(err))
 				setLoading(false)
@@ -173,49 +158,49 @@ export function useCliRuntime({
 	}, []) // Run once on mount
 
 	const runTask = useCallback((prompt: string): Promise<void> => {
-		if (!runtimeRef.current) {
+		if (!sessionControllerRef.current) {
 			return Promise.reject(new Error("CLI runtime not ready"))
 		}
 
 		const taskId = pendingInitialTaskIdRef.current
 		pendingInitialTaskIdRef.current = undefined
-		return runtimeRef.current.runTask(prompt, taskId)
+		return sessionControllerRef.current.runTask(prompt, taskId)
 	}, [])
 
 	const refreshCliMetadata = useCallback(() => {
-		runtimeRef.current?.refreshCliMetadata()
+		sessionControllerRef.current?.refreshCliMetadata()
 	}, [])
 
 	const selectTask = useCallback((taskId: string) => {
-		runtimeRef.current?.selectTask(taskId)
+		sessionControllerRef.current?.selectTask(taskId)
 	}, [])
 
 	const setMode = useCallback((modeSlug: string) => {
-		runtimeRef.current?.setMode(modeSlug)
+		sessionControllerRef.current?.setMode(modeSlug)
 	}, [])
 
 	const searchFiles = useCallback((query: string) => {
-		runtimeRef.current?.searchFiles(query)
+		sessionControllerRef.current?.searchFiles(query)
 	}, [])
 
 	const clearTask = useCallback(() => {
-		runtimeRef.current?.clearTask()
+		sessionControllerRef.current?.clearTask()
 	}, [])
 
 	const cancelTask = useCallback(() => {
-		runtimeRef.current?.cancelTask()
+		sessionControllerRef.current?.cancelTask()
 	}, [])
 
 	const sendTaskMessage = useCallback((text: string, images?: string[]) => {
-		runtimeRef.current?.sendTaskMessage(text, images)
+		sessionControllerRef.current?.sendTaskMessage(text, images)
 	}, [])
 
 	const approve = useCallback(() => {
-		runtimeRef.current?.approve()
+		sessionControllerRef.current?.approve()
 	}, [])
 
 	const reject = useCallback(() => {
-		runtimeRef.current?.reject()
+		sessionControllerRef.current?.reject()
 	}, [])
 
 	return useMemo(

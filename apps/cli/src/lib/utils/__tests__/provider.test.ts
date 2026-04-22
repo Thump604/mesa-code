@@ -37,11 +37,11 @@ describe("getApiKeyFromEnv", () => {
 describe("getProviderSettings", () => {
 	it("maps openai-compatible settings correctly", () => {
 		expect(
-			getProviderSettings("openai", "sk-local", "qwen3.5-27b", { baseUrl: "http://127.0.0.1:8080/v1" }),
+			getProviderSettings("openai", "sk-local", "qwen3.6-27b", { baseUrl: "http://127.0.0.1:8080/v1" }),
 		).toMatchObject({
 			apiProvider: "openai",
 			openAiApiKey: "sk-local",
-			openAiModelId: "qwen3.5-27b",
+			openAiModelId: "qwen3.6-27b",
 			openAiBaseUrl: "http://127.0.0.1:8080/v1",
 		})
 	})

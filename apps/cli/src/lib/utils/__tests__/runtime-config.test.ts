@@ -113,12 +113,12 @@ describe("runtime-config", () => {
 			expect(
 				resolveEffectiveModel(
 					undefined,
-					{ openAiModelId: "qwen3.5-27b", model: "ignored-model" },
+					{ openAiModelId: "qwen3.6-27b", model: "ignored-model" },
 					"openai",
 					"http://127.0.0.1:8080/v1",
 					"vllm-mlx",
 				),
-			).toBe("qwen3.5-27b")
+			).toBe("qwen3.6-27b")
 		})
 
 		it("falls back to the generic configured model for non-openai providers", () => {
