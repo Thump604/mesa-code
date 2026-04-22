@@ -158,11 +158,14 @@ program
 program
 	.command("use")
 	.description("Select, bootstrap, and verify a local runtime/model lane")
+	.argument("[target]", "Preset alias or model identifier to activate")
 	.option("-k, --api-key <key>", "API key for the selected local endpoint")
 	.option("--provider <provider>", "API provider override for protocol resolution")
 	.option("--protocol <protocol>", "API standard for local/self-hosted endpoints (openai or anthropic)")
 	.option("--runtime <runtime>", "Local runtime profile (llama.cpp or vllm-mlx)")
 	.option("--base-url <url>", "Base URL for the local runtime endpoint")
+	.option("--ops-base-url <url>", "Base URL for the local ops control plane")
+	.option("--preset <preset>", "Preset alias to activate through the ops control plane")
 	.option("-m, --model <model>", "Model or Hugging Face repo to activate on the selected runtime")
 	.option("--format <format>", 'Output format: "text" (default) or "json"', "text")
 	.option("--plan", "Only print the model source and storage plan; do not save or launch anything")
@@ -175,8 +178,8 @@ program
 		false,
 	)
 	.option("--wait-seconds <seconds>", "How long to wait for the runtime to become ready before returning", "20")
-	.action(async (options: Parameters<typeof useRuntime>[0]) => {
-		await runListAction(() => useRuntime(options))
+	.action(async (target: string | undefined, options: Parameters<typeof useRuntime>[1]) => {
+		await runListAction(() => useRuntime(target, options))
 	})
 
 program.parse()

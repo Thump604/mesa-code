@@ -256,6 +256,7 @@ Exit criteria:
 ### Week 4
 
 - ship first alpha to former Roo power users
+- make `roo use` prefer the ops control plane for preset aliases and active runtime state
 - expand `roo use` into model download and placement-policy flows
 - collect feedback only from local/private-heavy usage
 - decide whether editor bridge is urgent or can wait
@@ -281,7 +282,8 @@ Exit criteria:
 - major reduction in extension-host coupling
 - stable JSON and stream interfaces
 - better local runtime handling
-- managed local runtime lanes with `roo use`
+- ops-aware preset activation with `roo use`
+- managed local runtime fallback/bootstrap with `roo use`
 - first-class model discovery for both OpenAI-compatible and Anthropic-compatible local runtimes
 
 ## Comparison Target

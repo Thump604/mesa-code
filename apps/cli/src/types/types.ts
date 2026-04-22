@@ -69,6 +69,12 @@ export interface CliSettings {
 	onboardingProviderChoice?: LegacyOnboardingProviderChoice
 	/** True once the local/private-first onboarding guidance has been shown. */
 	hasCompletedOnboarding?: boolean
+	/** Selects whether the CLI should follow the ops control plane or manage runtimes directly. */
+	controlPlane?: "ops" | "direct-runtime"
+	/** Base URL for the local ops control plane when controlPlane === "ops". */
+	opsBaseUrl?: string
+	/** Last requested preset when following the ops control plane. */
+	activePresetId?: string
 	/** Default mode to use (e.g., "code", "architect", "ask", "debug") */
 	mode?: string
 	/** Default provider to use. Legacy Roo cloud provider values are ignored during resolution. */

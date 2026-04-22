@@ -45,7 +45,8 @@ What is already in motion on the fork branch:
 - CLI support for `--runtime llama.cpp|vllm-mlx`
 - CLI support for `--protocol openai|anthropic`
 - protocol-aware `--base-url`
-- managed local runtime selection through `roo use`
+- preset-aware `roo use` through the local ops control plane when available
+- managed direct-runtime bootstrap fallback through `roo use`
 - persisted runtime state and logs under `~/.roo/`
 - dry-run model source and storage planning through `roo use --plan`
 - local loopback placeholder-key behavior for self-hosted endpoints
@@ -97,6 +98,9 @@ pnpm --filter @roo-code/cli build
 ### Run the CLI Against a Local Runtime
 
 ```bash
+# Prefer the local ops control plane for runtime-owned preset aliases.
+roo use fast-qwen
+
 # Start or swap a managed vllm-mlx lane.
 roo use \
   --runtime vllm-mlx \
@@ -125,6 +129,11 @@ The fork should not invent duplicate model-serving telemetry for those runtimes.
 Observability should come from the engine itself, especially for `llama.cpp`
 and `vllm-mlx`. The CLI’s job is to normalize those signals and make the local
 runtime lane easy to bootstrap and inspect.
+
+When ops is present, `roo use` should consume the ops control plane instead of
+running detached runtime processes directly. Direct runtime management remains a
+fallback/bootstrap path until the ops/runtime contract covers preset-aware
+load/swap, acquisition, placement, and ready-state semantics end to end.
 
 Where runtime-native placement support is still missing, the CLI should be
 explicit about it. `roo use --plan` now shows model source and storage policy

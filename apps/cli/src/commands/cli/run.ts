@@ -23,6 +23,7 @@ import { isValidOutputFormat } from "@/types/json-events.js"
 import { JsonEventEmitter } from "@/agent/json-event-emitter.js"
 import { createCliRuntime, type CliRuntime, type CliRuntimeOptions } from "@/runtime/index.js"
 
+import { getOpsModeContract, resolveOpsBaseUrl } from "@/lib/ops-control-plane.js"
 import { loadSettings } from "@/lib/storage/index.js"
 import { readWorkspaceTaskSessions, resolveWorkspaceResumeSessionId } from "@/lib/task-history/index.js"
 import { getEnvVarName, getApiKeyFromEnv } from "@/lib/utils/provider.js"
@@ -162,53 +163,76 @@ export async function run(promptArg: string | undefined, flagOptions: FlagOption
 	// Options
 
 	const settings = await loadSettings()
+	let runtimeAwareSettings = settings
+
+	if (!flagOptions.model && settings.controlPlane === "ops") {
+		try {
+			const modeContract = await getOpsModeContract(resolveOpsBaseUrl(undefined, settings.opsBaseUrl))
+			if (modeContract.active_model_id) {
+				runtimeAwareSettings = {
+					...settings,
+					model: modeContract.active_model_id,
+					...(settings.protocol === "openai" || settings.provider === "openai"
+						? { openAiModelId: modeContract.active_model_id }
+						: {}),
+				}
+			}
+		} catch {
+			// Fall back to persisted settings when ops is unavailable.
+		}
+	}
 
 	const isTuiSupported = process.stdin.isTTY && process.stdout.isTTY
 	const isTuiEnabled = !flagOptions.print && isTuiSupported
 
 	// Determine effective values: CLI flags > settings file > DEFAULT_FLAGS.
-	const effectiveMode = flagOptions.mode || settings.mode || DEFAULT_FLAGS.mode
-	const effectiveProtocol = resolveEffectiveProtocol(flagOptions.protocol, flagOptions.provider, settings)
-	const effectiveRuntime = resolveEffectiveRuntime(flagOptions.runtime, settings)
+	const effectiveMode = flagOptions.mode || runtimeAwareSettings.mode || DEFAULT_FLAGS.mode
+	const effectiveProtocol = resolveEffectiveProtocol(flagOptions.protocol, flagOptions.provider, runtimeAwareSettings)
+	const effectiveRuntime = resolveEffectiveRuntime(flagOptions.runtime, runtimeAwareSettings)
 	const effectiveProvider = resolveEffectiveProvider(
 		flagOptions.provider,
-		settings,
+		runtimeAwareSettings,
 		effectiveProtocol,
 		effectiveRuntime,
 	)
 	const effectiveBaseUrl = resolveConfiguredBaseUrl(
 		flagOptions.baseUrl,
-		settings,
+		runtimeAwareSettings,
 		effectiveProtocol,
 		effectiveRuntime,
 	)
 	const effectiveModel = resolveEffectiveModel(
 		flagOptions.model,
-		settings,
+		runtimeAwareSettings,
 		effectiveProvider,
 		effectiveBaseUrl,
 		effectiveRuntime,
 	)
 	const hasExplicitProvider =
-		flagOptions.provider !== undefined || (settings.provider !== undefined && settings.provider !== "roo")
+		flagOptions.provider !== undefined ||
+		(runtimeAwareSettings.provider !== undefined && runtimeAwareSettings.provider !== "roo")
 	const isOnboardingEnabled =
 		isTuiEnabled &&
-		!settings.hasCompletedOnboarding &&
-		!settings.onboardingProviderChoice &&
+		!runtimeAwareSettings.hasCompletedOnboarding &&
+		!runtimeAwareSettings.onboardingProviderChoice &&
 		!hasExplicitProvider &&
 		!effectiveBaseUrl &&
 		!effectiveRuntime &&
 		effectiveProvider === "openai"
 	const effectiveReasoningEffort =
-		flagOptions.reasoningEffort || settings.reasoningEffort || DEFAULT_FLAGS.reasoningEffort
+		flagOptions.reasoningEffort || runtimeAwareSettings.reasoningEffort || DEFAULT_FLAGS.reasoningEffort
 	const effectiveWorkspacePath = flagOptions.workspace ? path.resolve(flagOptions.workspace) : process.cwd()
 	const legacyRequireApprovalFromSettings =
-		settings.requireApproval ??
-		(settings.dangerouslySkipPermissions === undefined ? undefined : !settings.dangerouslySkipPermissions)
+		runtimeAwareSettings.requireApproval ??
+		(runtimeAwareSettings.dangerouslySkipPermissions === undefined
+			? undefined
+			: !runtimeAwareSettings.dangerouslySkipPermissions)
 	const effectiveRequireApproval = flagOptions.requireApproval || legacyRequireApprovalFromSettings || false
-	const effectiveExitOnComplete = flagOptions.print || flagOptions.oneshot || settings.oneshot || false
+	const effectiveExitOnComplete = flagOptions.print || flagOptions.oneshot || runtimeAwareSettings.oneshot || false
 	const rawConsecutiveMistakeLimit =
-		flagOptions.consecutiveMistakeLimit ?? settings.consecutiveMistakeLimit ?? DEFAULT_FLAGS.consecutiveMistakeLimit
+		flagOptions.consecutiveMistakeLimit ??
+		runtimeAwareSettings.consecutiveMistakeLimit ??
+		DEFAULT_FLAGS.consecutiveMistakeLimit
 	const effectiveConsecutiveMistakeLimit = Number(rawConsecutiveMistakeLimit)
 
 	if (!Number.isInteger(effectiveConsecutiveMistakeLimit) || effectiveConsecutiveMistakeLimit < 0) {

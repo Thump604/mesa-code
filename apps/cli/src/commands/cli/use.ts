@@ -1,3 +1,12 @@
+import {
+	activateOpsPreset,
+	buildOpsControlPlaneSettingsPatch,
+	getOpsModeContract,
+	isOpsControlPlaneAvailable,
+	listOpsModelPresets,
+	resolveOpsBaseUrl,
+	type OpsModelPreset,
+} from "@/lib/ops-control-plane.js"
 import { loadSettings, saveSettings } from "@/lib/storage/index.js"
 import { getApiKeyFromEnv } from "@/lib/utils/provider.js"
 import {
@@ -30,6 +39,8 @@ export type UseOptions = {
 	runtime?: SupportedLocalRuntime
 	baseUrl?: string
 	model?: string
+	preset?: string
+	opsBaseUrl?: string
 	format?: string
 	plan?: boolean
 	installRuntime?: boolean
@@ -37,6 +48,16 @@ export type UseOptions = {
 	storageRoot?: string
 	allowExternalStorage?: boolean
 	waitSeconds?: string | number
+}
+
+type UseRuntimeDeps = {
+	activateManagedRuntime?: typeof activateManagedRuntime
+	activateOpsPreset?: typeof activateOpsPreset
+	buildModelUsePlan?: typeof buildModelUsePlan
+	getOpsModeContract?: typeof getOpsModeContract
+	isOpsControlPlaneAvailable?: typeof isOpsControlPlaneAvailable
+	listOpsModelPresets?: typeof listOpsModelPresets
+	saveSettings?: typeof saveSettings
 }
 
 function parseUseFormat(rawFormat: string | undefined): UseFormat {
@@ -70,6 +91,12 @@ function outputText(result: RuntimeUseResult): void {
 	process.stdout.write(`Runtime: ${result.runtime}\n`)
 	process.stdout.write(`Protocol: ${result.protocol}\n`)
 	process.stdout.write(`Base URL: ${result.baseUrl}\n`)
+	if (result.controlPlane) {
+		process.stdout.write(`Control Plane: ${result.controlPlane.kind} (${result.controlPlane.baseUrl})\n`)
+	}
+	if (result.activePreset) {
+		process.stdout.write(`Active preset: ${result.activePreset.displayName ?? result.activePreset.id}\n`)
+	}
 	process.stdout.write(`Model: ${result.model}\n`)
 	process.stdout.write(`State: ${result.state}\n`)
 
@@ -129,7 +156,7 @@ function outputTextPlan(plan: ModelUsePlan): void {
 	process.stdout.write(`Likely External Storage: ${plan.placement.likelyExternal ? "yes" : "no"}\n`)
 }
 
-function validateUseOptions(options: UseOptions): void {
+function validateUseOptions(targetArg: string | undefined, options: UseOptions): void {
 	if (options.protocol && !isSupportedApiStandard(options.protocol)) {
 		throw new Error(`Invalid protocol: ${options.protocol}; must be one of: ${supportedApiStandards.join(", ")}`)
 	}
@@ -137,17 +164,43 @@ function validateUseOptions(options: UseOptions): void {
 	if (options.runtime && !isSupportedLocalRuntime(options.runtime)) {
 		throw new Error(`Invalid runtime: ${options.runtime}; must be one of: ${supportedLocalRuntimes.join(", ")}`)
 	}
+
+	if (options.preset && options.model) {
+		throw new Error("Use either --preset or --model, not both.")
+	}
+
+	if (targetArg && (options.preset || options.model)) {
+		throw new Error("Use either [target] or --preset/--model, not both.")
+	}
+}
+
+function resolvePresetTarget(
+	targetArg: string | undefined,
+	options: UseOptions,
+	presets: OpsModelPreset[],
+): OpsModelPreset | undefined {
+	const requestedPreset = options.preset ?? targetArg
+	if (!requestedPreset) {
+		return undefined
+	}
+
+	return presets.find((preset) => preset.id === requestedPreset)
+}
+
+function resolveModelTarget(targetArg: string | undefined, options: UseOptions): string | undefined {
+	if (options.preset) {
+		return undefined
+	}
+
+	return options.model ?? targetArg
 }
 
 export async function useRuntime(
+	targetArg: string | undefined,
 	options: UseOptions,
-	deps: {
-		activateManagedRuntime?: typeof activateManagedRuntime
-		buildModelUsePlan?: typeof buildModelUsePlan
-		saveSettings?: typeof saveSettings
-	} = {},
+	deps: UseRuntimeDeps = {},
 ): Promise<void> {
-	validateUseOptions(options)
+	validateUseOptions(targetArg, options)
 
 	const settings = await loadSettings()
 	const runtime = resolveEffectiveRuntime(options.runtime ?? "vllm-mlx", settings)
@@ -158,12 +211,90 @@ export async function useRuntime(
 	const protocol = resolveEffectiveProtocol(options.protocol, options.provider, settings)
 	const provider = resolveEffectiveProvider(options.provider, settings, protocol, runtime)
 	const baseUrl = resolveConfiguredBaseUrl(options.baseUrl, settings, protocol, runtime)
-	const model = resolveEffectiveModel(options.model, settings, provider, baseUrl, runtime)
 
 	if (!baseUrl) {
 		throw new Error("Could not resolve a base URL for the selected local runtime.")
 	}
 
+	const opsBaseUrl = resolveOpsBaseUrl(options.opsBaseUrl, settings.opsBaseUrl)
+	const opsAvailable = await (deps.isOpsControlPlaneAvailable ?? isOpsControlPlaneAvailable)(opsBaseUrl)
+	const presets = opsAvailable ? await (deps.listOpsModelPresets ?? listOpsModelPresets)(opsBaseUrl) : []
+	const requestedPreset = resolvePresetTarget(targetArg, options, presets)
+	const requestedModel = requestedPreset
+		? undefined
+		: (resolveModelTarget(targetArg, options) ??
+			resolveEffectiveModel(undefined, settings, provider, baseUrl, runtime))
+
+	if (!requestedModel && !requestedPreset) {
+		throw new Error("Use requires a preset alias, --model, or a saved model for the selected local runtime.")
+	}
+
+	if (requestedPreset && !opsAvailable) {
+		throw new Error(
+			`The ops control plane is required to activate preset ${requestedPreset.id}. Start ops at ${opsBaseUrl} or use --model for direct runtime bootstrap.`,
+		)
+	}
+
+	if (requestedPreset) {
+		const activatedPreset = await (deps.activateOpsPreset ?? activateOpsPreset)(opsBaseUrl, requestedPreset.id)
+		const modeContract = await (deps.getOpsModeContract ?? getOpsModeContract)(opsBaseUrl)
+		const activeModel = modeContract.active_model_id ?? activatedPreset.model_id ?? requestedPreset.model_id ?? ""
+		const result: RuntimeUseResult = {
+			runtime,
+			protocol,
+			provider,
+			baseUrl,
+			model: activeModel,
+			state: "starting",
+			controlPlane: {
+				kind: "ops",
+				baseUrl: opsBaseUrl,
+			},
+			activePreset: {
+				id: modeContract.active_preset ?? requestedPreset.id,
+				displayName:
+					modeContract.active_preset_display_name ?? requestedPreset.display_name ?? requestedPreset.id,
+			},
+			actions: [
+				{
+					kind: "settings-selected",
+					description: `Activated preset ${requestedPreset.id} through the ops control plane.`,
+				},
+			],
+			hints: [
+				"Ops/runtime does not expose authoritative model-ready state yet; treat this as a preset activation request until /ready and structured operation state land.",
+			],
+		}
+
+		await (deps.saveSettings ?? saveSettings)(
+			buildOpsControlPlaneSettingsPatch({
+				opsBaseUrl,
+				presetId: requestedPreset.id,
+				provider,
+				protocol,
+				runtime,
+				baseUrl,
+				model: activeModel,
+				apiKey: resolveConfiguredApiKey(
+					provider,
+					options.apiKey,
+					settings,
+					getApiKeyFromEnv(provider),
+					baseUrl,
+				),
+			}),
+		)
+
+		if (parseUseFormat(options.format) === "json") {
+			outputJson(result)
+			return
+		}
+
+		outputText(result)
+		return
+	}
+
+	const model = requestedModel
 	if (!model) {
 		throw new Error("Use requires --model or a saved model for the selected local runtime.")
 	}

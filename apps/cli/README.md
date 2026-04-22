@@ -12,7 +12,8 @@ The direction is:
 - no Roo cloud auth commands in the supported CLI surface
 - `llama.cpp` and `vllm-mlx` as first-class runtimes
 - OpenAI-compatible and Anthropic-compatible endpoint support
-- managed local runtime lanes through `roo use`
+- preset-aware `roo use` through the local ops control plane when available
+- managed direct-runtime bootstrap fallback through `roo use`
 - unified observability for local runtimes using Prometheus scrapes normalized into an OpenTelemetry-aligned namespace
 
 The default provider contract is now local OpenAI-compatible inference. Remote
@@ -149,17 +150,21 @@ roo --print --create-with-session-id 018f7fc8-7c96-7f7c-98aa-2ec4ff7f6d87 "Summa
 
 ### Local Runtime Profiles
 
-For local/private deployments, the CLI can now own the local runtime lane
-instead of just pointing at an endpoint. `roo use` saves the profile, launches
-or reuses a managed `vllm-mlx` process, swaps the active model by restarting
-that managed lane when needed, and keeps runtime logs/state under `~/.roo/`.
+For local/private deployments, `roo use` now prefers the local ops control
+plane for runtime-owned presets and active-model tracking. When ops is not
+present, the CLI falls back to its managed direct-runtime bootstrap lane,
+including detached `vllm-mlx` process management and persisted runtime
+logs/state under `~/.roo/`.
 
-That is the current first slice, not the full production control plane yet. The
-gap between today’s CLI-owned managed lane and the target runtime/ops contract
-is tracked in
+That is still a transitional slice, not the full production control plane yet.
+The gap between today’s fallback bootstrap path and the target runtime/ops
+contract is tracked in
 [`RUNTIME_CONTROL_PLANE_GAP_ANALYSIS.md`](../../RUNTIME_CONTROL_PLANE_GAP_ANALYSIS.md).
 
 ```bash
+# Prefer the ops control plane for runtime-owned preset aliases.
+roo use fast-qwen
+
 # Start or swap the managed vllm-mlx lane.
 roo use \
   --runtime vllm-mlx \
@@ -200,7 +205,9 @@ operator surface. The new `roo doctor` command probes health, model discovery,
 and `/metrics`, then normalizes runtime metrics into a stable
 `gen_ai.local.*` namespace for downstream OpenTelemetry collection or
 dashboards. `roo use` builds on the same contract to verify that the managed
-runtime lane is actually responding before it returns when possible.
+runtime lane is actually responding before it returns when possible. When ops is
+available, `roo use` should follow ops-owned preset/model state rather than
+inventing its own alias or readiness semantics.
 
 `--storage-root` is currently planning-only. The CLI will show the placement
 plan and block obviously external/removable targets unless

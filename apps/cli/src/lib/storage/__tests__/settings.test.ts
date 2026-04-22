@@ -109,6 +109,24 @@ describe("Settings Storage", () => {
 			const loaded = await loadSettings()
 			expect(loaded).toEqual(settingsData)
 		})
+
+		it("should preserve ops control-plane settings", async () => {
+			const settingsData = {
+				controlPlane: "ops" as const,
+				opsBaseUrl: "http://127.0.0.1:8001",
+				activePresetId: "fast-qwen",
+				protocol: "openai" as const,
+				runtime: "vllm-mlx" as const,
+				baseUrl: "http://127.0.0.1:8080/v1",
+				model: "qwen3.5-35b-a3b",
+			}
+
+			await fs.mkdir(actualTestConfigDir, { recursive: true })
+			await fs.writeFile(expectedSettingsFile, JSON.stringify(settingsData), "utf-8")
+
+			const loaded = await loadSettings()
+			expect(loaded).toEqual(settingsData)
+		})
 	})
 
 	describe("saveSettings", () => {
@@ -130,6 +148,21 @@ describe("Settings Storage", () => {
 
 			expect(settings.mode).toBe("code")
 			expect(settings.provider).toBe("openrouter")
+		})
+
+		it("should persist ops control-plane settings fields", async () => {
+			await saveSettings({
+				controlPlane: "ops",
+				opsBaseUrl: "http://127.0.0.1:8001",
+				activePresetId: "fast-qwen",
+			})
+
+			const savedData = await fs.readFile(expectedSettingsFile, "utf-8")
+			const settings = JSON.parse(savedData)
+
+			expect(settings.controlPlane).toBe("ops")
+			expect(settings.opsBaseUrl).toBe("http://127.0.0.1:8001")
+			expect(settings.activePresetId).toBe("fast-qwen")
 		})
 
 		it("should save all default settings fields", async () => {

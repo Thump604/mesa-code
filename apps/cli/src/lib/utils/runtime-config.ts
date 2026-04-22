@@ -182,6 +182,9 @@ export function buildLocalRuntimeSettingsPatch(options: {
 }): Partial<CliSettings> {
 	const persistedApiKey = options.apiKey && options.apiKey !== "not-needed" ? options.apiKey : undefined
 	const patch: Partial<CliSettings> = {
+		controlPlane: "direct-runtime",
+		opsBaseUrl: undefined,
+		activePresetId: undefined,
 		provider: options.provider,
 		protocol: options.protocol,
 		runtime: options.runtime,

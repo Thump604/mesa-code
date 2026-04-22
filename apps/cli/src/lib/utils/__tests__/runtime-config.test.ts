@@ -188,6 +188,9 @@ describe("runtime-config", () => {
 					apiKey: "not-needed",
 				}),
 			).toEqual({
+				controlPlane: "direct-runtime",
+				opsBaseUrl: undefined,
+				activePresetId: undefined,
 				provider: "openai",
 				protocol: "openai",
 				runtime: "vllm-mlx",
@@ -211,6 +214,9 @@ describe("runtime-config", () => {
 					apiKey: "test-key",
 				}),
 			).toEqual({
+				controlPlane: "direct-runtime",
+				opsBaseUrl: undefined,
+				activePresetId: undefined,
 				provider: "anthropic",
 				protocol: "anthropic",
 				runtime: "llama.cpp",

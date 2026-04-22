@@ -38,6 +38,14 @@ export type RuntimeUseResult = {
 	baseUrl: string
 	model: string
 	state: "configured" | "starting" | "ready"
+	controlPlane?: {
+		kind: "ops" | "direct-runtime-bootstrap"
+		baseUrl: string
+	}
+	activePreset?: {
+		id: string
+		displayName?: string
+	}
 	plan?: ModelUsePlan
 	executable?: string
 	managedProcess?: Pick<ManagedRuntimeProcessState, "pid" | "logPath">
@@ -345,6 +353,10 @@ export async function activateManagedRuntime(
 			baseUrl: request.baseUrl,
 			model: request.model,
 			state: "configured",
+			controlPlane: {
+				kind: "direct-runtime-bootstrap",
+				baseUrl: request.baseUrl,
+			},
 			plan: request.plan,
 			executable: executable.path,
 			actions,
@@ -396,6 +408,10 @@ export async function activateManagedRuntime(
 				baseUrl: request.baseUrl,
 				model: request.model,
 				state,
+				controlPlane: {
+					kind: "direct-runtime-bootstrap",
+					baseUrl: request.baseUrl,
+				},
 				plan: request.plan,
 				executable: executable.path,
 				managedProcess: {
@@ -474,6 +490,10 @@ export async function activateManagedRuntime(
 		baseUrl: request.baseUrl,
 		model: request.model,
 		state,
+		controlPlane: {
+			kind: "direct-runtime-bootstrap",
+			baseUrl: request.baseUrl,
+		},
 		plan: request.plan,
 		executable: executable.path,
 		managedProcess: {
