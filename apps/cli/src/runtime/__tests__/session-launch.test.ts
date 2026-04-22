@@ -1,11 +1,7 @@
 import { describe, expect, it, vi } from "vitest"
 
 import type { CliRuntime } from "../runtime.js"
-import {
-	activateCliRuntimeSession,
-	executeInitialSessionLaunch,
-	resolveInitialSessionLaunch,
-} from "../session-launch.js"
+import { activateCliRuntimeSession, resolveInitialSessionLaunch, runInitialSessionLaunch } from "../session-launch.js"
 
 function createRuntimeHarness(taskHistory = [{ id: "latest", task: "task", ts: 100, workspace: "/workspace" }]) {
 	return {
@@ -78,14 +74,17 @@ describe("resolveInitialSessionLaunch", () => {
 	})
 })
 
-describe("executeInitialSessionLaunch", () => {
+describe("runInitialSessionLaunch", () => {
 	it("runs a new task for start launches", async () => {
 		const runtime = createRuntimeHarness()
 
-		await executeInitialSessionLaunch(runtime, {
-			kind: "start",
-			prompt: "Explain the current architecture",
-			taskId: "task-123",
+		await runInitialSessionLaunch({
+			runtime,
+			launch: {
+				kind: "start",
+				prompt: "Explain the current architecture",
+				taskId: "task-123",
+			},
 		})
 
 		expect(runtime.runTask).toHaveBeenCalledWith("Explain the current architecture", "task-123")
@@ -95,9 +94,12 @@ describe("executeInitialSessionLaunch", () => {
 	it("resumes the selected session for resume launches", async () => {
 		const runtime = createRuntimeHarness()
 
-		await executeInitialSessionLaunch(runtime, {
-			kind: "resume",
-			sessionId: "task-456",
+		await runInitialSessionLaunch({
+			runtime,
+			launch: {
+				kind: "resume",
+				sessionId: "task-456",
+			},
 		})
 
 		expect(runtime.resumeTask).toHaveBeenCalledWith("task-456")
@@ -107,7 +109,49 @@ describe("executeInitialSessionLaunch", () => {
 	it("does nothing for idle launches", async () => {
 		const runtime = createRuntimeHarness()
 
-		await expect(executeInitialSessionLaunch(runtime, { kind: "idle" })).resolves.toBeUndefined()
+		await expect(
+			runInitialSessionLaunch({
+				runtime,
+				launch: { kind: "idle" },
+			}),
+		).resolves.toBeUndefined()
+		expect(runtime.runTask).not.toHaveBeenCalled()
+		expect(runtime.resumeTask).not.toHaveBeenCalled()
+	})
+
+	it("uses custom resume and start handlers when provided", async () => {
+		const runtime = createRuntimeHarness()
+		const onStart = vi.fn().mockResolvedValue(undefined)
+		const onResume = vi.fn().mockResolvedValue(undefined)
+
+		await runInitialSessionLaunch({
+			runtime,
+			launch: {
+				kind: "start",
+				prompt: "Start here",
+				taskId: "task-123",
+			},
+			onStart,
+		})
+
+		await runInitialSessionLaunch({
+			runtime,
+			launch: {
+				kind: "resume",
+				sessionId: "task-456",
+			},
+			onResume,
+		})
+
+		expect(onStart).toHaveBeenCalledWith({
+			kind: "start",
+			prompt: "Start here",
+			taskId: "task-123",
+		})
+		expect(onResume).toHaveBeenCalledWith({
+			kind: "resume",
+			sessionId: "task-456",
+		})
 		expect(runtime.runTask).not.toHaveBeenCalled()
 		expect(runtime.resumeTask).not.toHaveBeenCalled()
 	})

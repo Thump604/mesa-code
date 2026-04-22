@@ -5,6 +5,7 @@ import type { ExtensionMessage } from "@roo-code/types"
 
 import {
 	activateCliRuntimeSession,
+	runInitialSessionLaunch,
 	type CliRuntime,
 	type CliRuntimeOptions,
 	type CreateCliRuntime,
@@ -124,24 +125,28 @@ export function useCliRuntime({
 					},
 				})
 
-				if (initialLaunch.kind === "resume") {
-					setCurrentTaskId(initialLaunch.sessionId)
-					setIsResumingTask(true)
-					setHasStartedTask(true)
-					setLoading(true)
-					runtime.selectTask(initialLaunch.sessionId)
-					return
-				}
-
-				setLoading(false)
-
-				if (initialLaunch.kind === "start") {
-					setHasStartedTask(true)
-					setLoading(true)
-					addMessage({ id: randomUUID(), role: "user", content: initialLaunch.prompt })
-					pendingInitialTaskIdRef.current = undefined
-					await runtime.runTask(initialLaunch.prompt, initialLaunch.taskId)
-				}
+				await runInitialSessionLaunch({
+					runtime,
+					launch: initialLaunch,
+					onIdle: () => {
+						setLoading(false)
+					},
+					onResume: async (launch) => {
+						setCurrentTaskId(launch.sessionId)
+						setIsResumingTask(true)
+						setHasStartedTask(true)
+						setLoading(true)
+						runtime.selectTask(launch.sessionId)
+					},
+					onStart: async (launch) => {
+						setLoading(false)
+						setHasStartedTask(true)
+						setLoading(true)
+						addMessage({ id: randomUUID(), role: "user", content: launch.prompt })
+						pendingInitialTaskIdRef.current = undefined
+						await runtime.runTask(launch.prompt, launch.taskId)
+					},
+				})
 			} catch (err) {
 				setError(err instanceof Error ? err.message : String(err))
 				setLoading(false)

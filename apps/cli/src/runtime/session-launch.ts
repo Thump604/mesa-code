@@ -36,6 +36,14 @@ export interface ActivateCliRuntimeSessionOptions {
 	afterActivate?: (runtime: CliRuntime) => void | Promise<void>
 }
 
+export interface RunInitialSessionLaunchOptions {
+	runtime: Pick<CliRuntime, "runTask" | "resumeTask">
+	launch: InitialSessionLaunch
+	onStart?: (launch: Extract<InitialSessionLaunch, { kind: "start" }>) => void | Promise<void>
+	onResume?: (launch: Extract<InitialSessionLaunch, { kind: "resume" }>) => void | Promise<void>
+	onIdle?: (launch: Extract<InitialSessionLaunch, { kind: "idle" }>) => void | Promise<void>
+}
+
 export async function resolveInitialSessionLaunch(
 	runtime: Pick<CliRuntime, "readTaskHistory">,
 	options: InitialSessionLaunchOptions,
@@ -87,18 +95,32 @@ export async function activateCliRuntimeSession({
 	return resolveInitialSessionLaunch(runtime, initialLaunch)
 }
 
-export async function executeInitialSessionLaunch(
-	runtime: Pick<CliRuntime, "runTask" | "resumeTask">,
-	launch: InitialSessionLaunch,
-): Promise<void> {
+export async function runInitialSessionLaunch({
+	runtime,
+	launch,
+	onStart,
+	onResume,
+	onIdle,
+}: RunInitialSessionLaunchOptions): Promise<void> {
 	switch (launch.kind) {
 		case "resume":
+			if (onResume) {
+				await onResume(launch)
+				return
+			}
+
 			await runtime.resumeTask(launch.sessionId)
 			return
 		case "start":
+			if (onStart) {
+				await onStart(launch)
+				return
+			}
+
 			await runtime.runTask(launch.prompt, launch.taskId)
 			return
 		case "idle":
+			await onIdle?.(launch)
 			return
 	}
 }

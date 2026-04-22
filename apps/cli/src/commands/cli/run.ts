@@ -24,7 +24,7 @@ import { JsonEventEmitter } from "@/agent/json-event-emitter.js"
 import {
 	activateCliRuntimeSession,
 	createCliRuntime,
-	executeInitialSessionLaunch,
+	runInitialSessionLaunch,
 	type CliRuntime,
 	type CliRuntimeOptions,
 } from "@/runtime/index.js"
@@ -651,9 +651,13 @@ export async function run(promptArg: string | undefined, flagOptions: FlagOption
 					throw new Error("--stdin-prompt-stream requires --output-format=stream-json to emit control events")
 				}
 
-				if (initialLaunch.kind === "resume") {
-					await bootstrapResumeForStdinStream(runtime, initialLaunch.sessionId)
-				}
+				await runInitialSessionLaunch({
+					runtime,
+					launch: initialLaunch,
+					onResume: async (launch) => {
+						await bootstrapResumeForStdinStream(runtime, launch.sessionId)
+					},
+				})
 
 				await runStdinStreamMode({
 					runtime,
@@ -663,7 +667,10 @@ export async function run(promptArg: string | undefined, flagOptions: FlagOption
 					},
 				})
 			} else {
-				await executeInitialSessionLaunch(runtime, initialLaunch)
+				await runInitialSessionLaunch({
+					runtime,
+					launch: initialLaunch,
+				})
 			}
 
 			await disposeRuntime()
