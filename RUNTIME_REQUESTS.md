@@ -5,6 +5,11 @@
 This fork is trying to become a local/private-first coding CLI. The biggest
 product risk is not prompt UX or TUI polish. It is runtime quality.
 
+This is especially relevant now that `Qwen3.6` is live and should be treated as
+one of the primary frontier agentic targets for local/private coding workflows.
+If the runtime cannot make `Qwen3.6` easy to acquire, place, start, swap, and
+observe, then the platform is not meeting the current bar.
+
 Today, running local AI well across machines is still too manual:
 
 - install steps are inconsistent
@@ -37,6 +42,22 @@ And the stack should:
 8. expose one clean health and metrics contract
 
 That requires stronger runtime primitives than we have now.
+
+## Immediate Reality Check: Qwen3.6
+
+`Qwen3.6` should be treated as a flagship runtime target, not a corner case.
+That means runtime quality now needs to cover all of the following for a large,
+modern, agent-oriented model family:
+
+- predictable download and resume behavior
+- correct disk placement for very large model assets
+- explicit load/swap semantics for resident lanes
+- readiness that reflects the requested model, not just a running process
+- strong metrics around load time, queueing, TTFT, decode speed, and memory use
+- correct capability reporting for coding, reasoning, tool use, and vision
+
+If these features are weak, the user experience degrades exactly where the
+market is currently paying attention.
 
 ## Highest-Priority Requests
 
@@ -112,6 +133,8 @@ Requirements:
 - avoid silent process restarts without a structured event
 
 This matters especially for `vllm-mlx`, where model swap is a core advantage.
+It also matters directly for `Qwen3.6`, which is precisely the kind of model
+family users will want to keep on a fast resident lane and swap deliberately.
 
 ### 5. Health And Readiness Contract
 
@@ -151,6 +174,8 @@ Requirements:
 - no fake discovery path that returns misleading defaults
 
 Anthropic-compatible local runtimes especially need a better discovery story.
+That matters for `Qwen3.6` too, because users increasingly want to run frontier
+open models behind both OpenAI-style and Anthropic-style tooling surfaces.
 
 ### 7. Unified Observability
 
@@ -179,6 +204,9 @@ Requirements:
     - status/result
 
 The CLI can normalize metrics, but the runtime must expose real ones first.
+For `Qwen3.6`-class workloads, this is not optional. Operators need to know
+whether the runtime is downloading, loading, warming, memory-bound, or simply
+stalled.
 
 ### 8. Structured Errors And Events
 
@@ -281,6 +309,10 @@ The request is simple:
 
 give local/private operators a real runtime contract, not just a raw inference
 server.
+
+`Qwen3.6` is the concrete test case. If the runtime stack can make that model
+family feel straightforward and reliable, the platform is on the right track.
+If not, the product will keep feeling brittle no matter how good the CLI is.
 
 That is the difference between:
 
