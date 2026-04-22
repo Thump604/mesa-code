@@ -141,9 +141,10 @@ Goal: make local/private the default contract.
 - default provider resolution to local OpenAI-compatible endpoints
 - make telemetry opt-in and auditable
 - keep model-serving observability with the runtime engine, not the CLI
-- make local runtime profiles zero-friction with sensible loopback defaults and a first-run doctor path
+- make local runtime profiles zero-friction with sensible loopback defaults, a first-run doctor path, and a `roo use` bootstrap lane
 - support clean config import from Roo local settings
 - add a first-run local setup doctor for Ollama, LM Studio, `llama.cpp`, `vllm-mlx`, and OpenAI-compatible APIs
+- persist managed local runtime state so the CLI can swap or recover its own resident runtime lane
 
 Exit criteria:
 
@@ -182,6 +183,9 @@ Goal: make local model use better than cloud-native competitors.
 - support both OpenAI-compatible and Anthropic-compatible local endpoint standards
 - unify `llama.cpp` and `vllm-mlx` runtime-native metrics into an OpenTelemetry-aligned observability layer
 - add first-class Anthropic-compatible model discovery/listing instead of requiring manual model IDs everywhere
+- add a runtime/model manager contract with adapters for model install, startup, health, metrics, and model swap
+- add a model-source layer for Hugging Face and local disk, with resume/checksum-friendly downloads
+- add a placement policy so large resident models land on the right disk automatically instead of removable or slow storage
 - model capability registry with context, reasoning, tool, and vision metadata
 - local presets tuned for common runtimes
 - clear timeout and retry behavior for slow local inference
@@ -246,10 +250,12 @@ Exit criteria:
 - stabilize the structured non-interactive interface
 - replace discovery and listing paths with CLI-native implementations
 - add Anthropic-compatible model discovery/listing support for local runtimes
+- land the first `roo use` runtime bootstrap path for managed local lanes
 
 ### Week 4
 
 - ship first alpha to former Roo power users
+- expand `roo use` into model download and placement-policy flows
 - collect feedback only from local/private-heavy usage
 - decide whether editor bridge is urgent or can wait
 
@@ -274,6 +280,7 @@ Exit criteria:
 - major reduction in extension-host coupling
 - stable JSON and stream interfaces
 - better local runtime handling
+- managed local runtime lanes with `roo use`
 - first-class model discovery for both OpenAI-compatible and Anthropic-compatible local runtimes
 
 ## Comparison Target
@@ -303,4 +310,4 @@ If it becomes "Roo maintenance with less momentum," stop.
 1. Finalize product name and package namespace.
 2. Decide whether to preserve Roo config format directly or support one-way import only.
 3. Decide whether to keep MCP on by default or require explicit enablement in the fork.
-4. Finish replacing the transitional extension-backed runtime implementation behind `CliRuntime`.
+4. Turn the new runtime manager into a full model source and placement layer instead of a thin launcher.

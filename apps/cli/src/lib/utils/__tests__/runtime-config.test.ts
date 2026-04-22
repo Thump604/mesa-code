@@ -1,4 +1,5 @@
 import {
+	buildLocalRuntimeSettingsPatch,
 	isLocalBaseUrl,
 	isLocalOpenAiBaseUrl,
 	resolveConfiguredApiKey,
@@ -172,6 +173,52 @@ describe("runtime-config", () => {
 
 		it("uses provider env keys for non-openai providers", () => {
 			expect(resolveConfiguredApiKey("anthropic", undefined, {}, "test-key", undefined)).toBe("test-key")
+		})
+	})
+
+	describe("buildLocalRuntimeSettingsPatch", () => {
+		it("persists openai-compatible local runtime settings without placeholder keys", () => {
+			expect(
+				buildLocalRuntimeSettingsPatch({
+					provider: "openai",
+					protocol: "openai",
+					runtime: "vllm-mlx",
+					baseUrl: "http://127.0.0.1:8080/v1",
+					model: "mlx-community/Qwen3-4B-4bit",
+					apiKey: "not-needed",
+				}),
+			).toEqual({
+				provider: "openai",
+				protocol: "openai",
+				runtime: "vllm-mlx",
+				baseUrl: "http://127.0.0.1:8080/v1",
+				model: "mlx-community/Qwen3-4B-4bit",
+				apiKey: undefined,
+				openAiBaseUrl: "http://127.0.0.1:8080/v1",
+				openAiModelId: "mlx-community/Qwen3-4B-4bit",
+				openAiApiKey: undefined,
+			})
+		})
+
+		it("persists anthropic-compatible runtime settings", () => {
+			expect(
+				buildLocalRuntimeSettingsPatch({
+					provider: "anthropic",
+					protocol: "anthropic",
+					runtime: "llama.cpp",
+					baseUrl: "http://127.0.0.1:8081",
+					model: "/models/coder.gguf",
+					apiKey: "test-key",
+				}),
+			).toEqual({
+				provider: "anthropic",
+				protocol: "anthropic",
+				runtime: "llama.cpp",
+				baseUrl: "http://127.0.0.1:8081",
+				model: "/models/coder.gguf",
+				apiKey: "test-key",
+				anthropicBaseUrl: "http://127.0.0.1:8081",
+			})
 		})
 	})
 })

@@ -12,6 +12,7 @@ The direction is:
 - no Roo cloud auth commands in the supported CLI surface
 - `llama.cpp` and `vllm-mlx` as first-class runtimes
 - OpenAI-compatible and Anthropic-compatible endpoint support
+- managed local runtime lanes through `roo use`
 - unified observability for local runtimes using Prometheus scrapes normalized into an OpenTelemetry-aligned namespace
 
 The default provider contract is now local OpenAI-compatible inference. Remote
@@ -34,7 +35,8 @@ ripgrep-backed indexing, fuzzy ranking, and `.rooignore` filtering.
 Install the Roo Code CLI with a single command:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/RooCodeInc/Roo-Code/main/apps/cli/install.sh | sh
+ROO_REPO=Thump604/Roo-Code \
+  curl -fsSL https://raw.githubusercontent.com/Thump604/Roo-Code/main/apps/cli/install.sh | sh
 ```
 
 **Requirements:**
@@ -51,7 +53,8 @@ ROO_INSTALL_DIR=/opt/roo-code ROO_BIN_DIR=/usr/local/bin curl -fsSL ... | sh
 **Install a specific version:**
 
 ```bash
-ROO_VERSION=0.1.0 curl -fsSL https://raw.githubusercontent.com/RooCodeInc/Roo-Code/main/apps/cli/install.sh | sh
+ROO_REPO=Thump604/Roo-Code ROO_VERSION=0.1.0 \
+  curl -fsSL https://raw.githubusercontent.com/Thump604/Roo-Code/main/apps/cli/install.sh | sh
 ```
 
 ### Updating
@@ -59,7 +62,8 @@ ROO_VERSION=0.1.0 curl -fsSL https://raw.githubusercontent.com/RooCodeInc/Roo-Co
 Re-run the install script to update to the latest version:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/RooCodeInc/Roo-Code/main/apps/cli/install.sh | sh
+ROO_REPO=Thump604/Roo-Code \
+  curl -fsSL https://raw.githubusercontent.com/Thump604/Roo-Code/main/apps/cli/install.sh | sh
 ```
 
 Or run:
@@ -145,26 +149,28 @@ roo --print --create-with-session-id 018f7fc8-7c96-7f7c-98aa-2ec4ff7f6d87 "Summa
 
 ### Local Runtime Profiles
 
-For local/private deployments, the CLI can target explicit runtime profiles for
-`llama.cpp` and `vllm-mlx` while speaking either OpenAI-compatible or
-Anthropic-compatible APIs.
+For local/private deployments, the CLI can now own the local runtime lane
+instead of just pointing at an endpoint. `roo use` saves the profile, launches
+or reuses a managed `vllm-mlx` process, swaps the active model by restarting
+that managed lane when needed, and keeps runtime logs/state under `~/.roo/`.
 
 ```bash
-# OpenAI-compatible vllm-mlx endpoint
-roo \
+# Start or swap the managed vllm-mlx lane.
+roo use \
   --runtime vllm-mlx \
   --protocol openai \
-  --base-url http://127.0.0.1:8080/v1 \
-  --model qwen3-coder \
-  "Summarize the repository"
+  --model mlx-community/Qwen3-4B-4bit
 
-# Anthropic-compatible llama.cpp adapter endpoint
-roo \
+# Then use the saved local lane.
+roo "Summarize the repository"
+
+# Save a configuration-only llama.cpp profile against an existing local server.
+roo use \
   --runtime llama.cpp \
   --protocol anthropic \
   --base-url http://127.0.0.1:8081 \
-  --model claude-local \
-  "Review the staged diff"
+  --model /models/coder.gguf \
+  --no-start
 ```
 
 The CLI should not own model-serving telemetry for these runtimes. Use the
@@ -175,7 +181,8 @@ The fork’s job is to unify those runtime-native signals into a consistent
 operator surface. The new `roo doctor` command probes health, model discovery,
 and `/metrics`, then normalizes runtime metrics into a stable
 `gen_ai.local.*` namespace for downstream OpenTelemetry collection or
-dashboards.
+dashboards. `roo use` builds on the same contract to verify that the managed
+runtime lane is actually responding before it returns when possible.
 
 ### Local Runtime Doctor
 
@@ -192,6 +199,9 @@ roo doctor --runtime llama.cpp --protocol anthropic
 # JSON output for automation
 roo doctor --runtime vllm-mlx --format json
 ```
+
+Managed `vllm-mlx` state is persisted in `~/.roo/runtime-state.json`. Detached
+runtime logs are written to `~/.roo/runtime-logs/`.
 
 ### First-Run Local Contract
 
@@ -294,7 +304,8 @@ The target architecture is a CLI-native runtime. The current state is transition
 3. The interactive execution core is still in transition; the current backend activates the extension bundle and drives the returned API surface directly instead of using the fake webview transport.
 4. Workspace file search and autocomplete are already carved out into CLI-owned modules, so the bundle backend is no longer responsible for `@` file lookup behavior.
 5. Local runtime doctor/observability is CLI-owned. It probes health and metrics endpoints directly instead of relying on extension-side plumbing.
-6. The roadmap goal is still to replace the remaining bundle-backed execution path with a fully CLI-native engine.
+6. Local runtime lifecycle is now starting to move into CLI-owned modules through `roo use`, managed process state, and runtime log tracking.
+7. The roadmap goal is still to replace the remaining bundle-backed execution path with a fully CLI-native engine.
 
 ## Development
 

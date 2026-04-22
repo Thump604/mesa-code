@@ -2,7 +2,16 @@ import { Command } from "commander"
 
 import { DEFAULT_FLAGS } from "@/types/constants.js"
 import { VERSION } from "@/lib/utils/version.js"
-import { run, listCommands, listModes, listModels, listSessions, doctor, upgrade } from "@/commands/index.js"
+import {
+	run,
+	listCommands,
+	listModes,
+	listModels,
+	listSessions,
+	doctor,
+	useRuntime,
+	upgrade,
+} from "@/commands/index.js"
 
 const program = new Command()
 
@@ -144,6 +153,23 @@ program
 	.option("--format <format>", 'Output format: "text" (default) or "json"', "text")
 	.action(async (options: Parameters<typeof doctor>[0]) => {
 		await runListAction(() => doctor(options))
+	})
+
+program
+	.command("use")
+	.description("Select, bootstrap, and verify a local runtime/model lane")
+	.option("-k, --api-key <key>", "API key for the selected local endpoint")
+	.option("--provider <provider>", "API provider override for protocol resolution")
+	.option("--protocol <protocol>", "API standard for local/self-hosted endpoints (openai or anthropic)")
+	.option("--runtime <runtime>", "Local runtime profile (llama.cpp or vllm-mlx)")
+	.option("--base-url <url>", "Base URL for the local runtime endpoint")
+	.option("-m, --model <model>", "Model or Hugging Face repo to activate on the selected runtime")
+	.option("--format <format>", 'Output format: "text" (default) or "json"', "text")
+	.option("--no-install-runtime", "Do not install the runtime automatically if the binary is missing")
+	.option("--no-start", "Only save the profile; do not launch or swap the managed runtime")
+	.option("--wait-seconds <seconds>", "How long to wait for the runtime to become ready before returning", "20")
+	.action(async (options: Parameters<typeof useRuntime>[0]) => {
+		await runListAction(() => useRuntime(options))
 	})
 
 program.parse()

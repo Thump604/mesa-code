@@ -171,3 +171,34 @@ export function resolveConfiguredApiKey(
 
 	return flagApiKey ?? settings.apiKey ?? envApiKey
 }
+
+export function buildLocalRuntimeSettingsPatch(options: {
+	provider: SupportedProvider
+	protocol: SupportedApiStandard
+	runtime: SupportedLocalRuntime
+	baseUrl: string
+	model: string
+	apiKey?: string
+}): Partial<CliSettings> {
+	const persistedApiKey = options.apiKey && options.apiKey !== "not-needed" ? options.apiKey : undefined
+	const patch: Partial<CliSettings> = {
+		provider: options.provider,
+		protocol: options.protocol,
+		runtime: options.runtime,
+		baseUrl: options.baseUrl,
+		model: options.model,
+		apiKey: persistedApiKey,
+	}
+
+	if (options.protocol === "openai") {
+		patch.openAiBaseUrl = options.baseUrl
+		patch.openAiModelId = options.model
+		patch.openAiApiKey = persistedApiKey
+	}
+
+	if (options.protocol === "anthropic") {
+		patch.anthropicBaseUrl = options.baseUrl
+	}
+
+	return patch
+}

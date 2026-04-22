@@ -1,20 +1,20 @@
 #!/bin/sh
 # Roo Code CLI Installer
-# Usage: curl -fsSL https://raw.githubusercontent.com/RooCodeInc/Roo-Code/main/apps/cli/install.sh | sh
+# Usage: ROO_REPO=Thump604/Roo-Code curl -fsSL https://raw.githubusercontent.com/Thump604/Roo-Code/main/apps/cli/install.sh | sh
 #
 # Environment variables:
 #   ROO_INSTALL_DIR   - Installation directory (default: ~/.roo/cli)
 #   ROO_BIN_DIR       - Binary symlink directory (default: ~/.local/bin)
 #   ROO_VERSION       - Specific version to install (default: latest)
 #   ROO_LOCAL_TARBALL - Path to local tarball to install (skips download)
-#   ROO_REPO          - GitHub repository to install from (default: RooCodeInc/Roo-Code)
+#   ROO_REPO          - GitHub repository to install from (default: Thump604/Roo-Code)
 
 set -e
 
 # Configuration
 INSTALL_DIR="${ROO_INSTALL_DIR:-$HOME/.roo/cli}"
 BIN_DIR="${ROO_BIN_DIR:-$HOME/.local/bin}"
-REPO="${ROO_REPO:-RooCodeInc/Roo-Code}"
+REPO="${ROO_REPO:-Thump604/Roo-Code}"
 MIN_NODE_VERSION=20
 
 # Color output (only if terminal supports it)

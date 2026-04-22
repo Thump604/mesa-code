@@ -41,13 +41,16 @@ What is already in motion on the fork branch:
 - CLI support for `--runtime llama.cpp|vllm-mlx`
 - CLI support for `--protocol openai|anthropic`
 - protocol-aware `--base-url`
+- managed local runtime selection through `roo use`
+- persisted runtime state and logs under `~/.roo/`
 - local loopback placeholder-key behavior for self-hosted endpoints
 
 What is next:
 
 - bundle-API runtime backend instead of direct `ExtensionHost` control
 - CLI-owned workspace file search/autocomplete instead of extension-side lookup
-- local runtime doctor and zero-friction setup path
+- runtime/model manager beyond the first `roo use` slice
+- Hugging Face-backed model source handling and placement policy
 - unified local-runtime observability around Prometheus/OpenTelemetry-style metrics
 - Anthropic-compatible model discovery/listing
 - fully CLI-native execution core beyond the transitional bundle backend
@@ -89,26 +92,28 @@ pnpm --filter @roo-code/cli build
 ### Run the CLI Against a Local Runtime
 
 ```bash
-# OpenAI-compatible vllm-mlx endpoint
-roo \
+# Start or swap a managed vllm-mlx lane.
+roo use \
   --runtime vllm-mlx \
   --protocol openai \
-  --base-url http://127.0.0.1:8080/v1 \
-  --model qwen3-coder \
-  "Summarize this repository"
+  --model mlx-community/Qwen3-4B-4bit
 
-# Anthropic-compatible llama.cpp adapter endpoint
-roo \
+# Then use the saved profile.
+roo "Summarize this repository"
+
+# Save a configuration-only llama.cpp lane against an existing server.
+roo use \
   --runtime llama.cpp \
   --protocol anthropic \
   --base-url http://127.0.0.1:8081 \
-  --model claude-local \
-  "Review the staged diff"
+  --model /models/coder.gguf \
+  --no-start
 ```
 
 The fork should not invent duplicate model-serving telemetry for those runtimes.
 Observability should come from the engine itself, especially for `llama.cpp`
-and `vllm-mlx`.
+and `vllm-mlx`. The CLI’s job is to normalize those signals and make the local
+runtime lane easy to bootstrap and inspect.
 
 ## Development
 
