@@ -36,6 +36,9 @@ with only surface-specific rendering above that layer. Print-mode terminal outpu
 and approval prompting now also live in an explicit CLI text surface instead of
 being hidden inside the runtime backend, so the runtime boundary is closer to
 transport/session only.
+The remaining non-interactive shell loop now also lives in a dedicated CLI
+runner instead of being inlined inside `run.ts`, so signal handling, cleanup,
+JSON emitter attachment, and stdin-stream settlement are owned by one module.
 Workspace
 file search for `@` mentions is also CLI-owned now, including
 ripgrep-backed indexing, fuzzy ranking, and `.rooignore` filtering.
