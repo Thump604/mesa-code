@@ -60,8 +60,20 @@ export class CliSessionController {
 		return this.launch
 	}
 
+	startTask(prompt: string, taskId?: string): Promise<void> {
+		return this.getRuntimeOrThrow().startTask(prompt, taskId)
+	}
+
+	showTask(taskId: string): Promise<void> {
+		return this.getRuntimeOrThrow().showTask(taskId)
+	}
+
+	waitForTaskCompletion(): Promise<void> {
+		return this.getRuntimeOrThrow().waitForTaskCompletion()
+	}
+
 	runTask(prompt: string, taskId?: string): Promise<void> {
-		return this.getRuntimeOrThrow().runTask(prompt, taskId)
+		return this.startTask(prompt, taskId).then(() => this.waitForTaskCompletion())
 	}
 
 	refreshCliMetadata(): void {

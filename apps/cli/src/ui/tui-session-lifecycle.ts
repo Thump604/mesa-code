@@ -62,7 +62,7 @@ export function createTuiSessionLifecycle({
 			setIsResumingTask(true)
 			setHasStartedTask(true)
 			setLoading(true)
-			controller.selectTask(launch.sessionId)
+			await controller.showTask(launch.sessionId)
 		},
 		onStart: async (launch, controller) => {
 			setLoading(false)
@@ -70,7 +70,7 @@ export function createTuiSessionLifecycle({
 			setLoading(true)
 			addMessage({ id: randomUUID(), role: "user", content: launch.prompt })
 			clearPendingInitialTaskId()
-			await controller.runTask(launch.prompt, launch.taskId)
+			await controller.startTask(launch.prompt, launch.taskId)
 		},
 	}
 }

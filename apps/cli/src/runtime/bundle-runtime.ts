@@ -239,20 +239,66 @@ export class BundleApiCliRuntime implements CliRuntime {
 		await this.publishState({ includeMessages: true, includeTaskHistory: true })
 	}
 
-	runTask(prompt: string, taskId?: string, configuration?: RooCodeSettings, images?: string[]): Promise<void> {
-		this.sendToRuntime({
+	async startTask(
+		prompt: string,
+		taskId?: string,
+		configuration?: RooCodeSettings,
+		images?: string[],
+	): Promise<void> {
+		await this.dispatchToRuntime({
 			type: "newTask",
 			text: prompt,
 			taskId,
 			taskConfiguration: configuration,
 			...(images !== undefined ? { images } : {}),
 		})
-		return this.waitForTaskCompletion()
+	}
+
+	async showTask(taskId: string): Promise<void> {
+		await this.dispatchToRuntime({ type: "showTaskWithId", text: taskId })
+	}
+
+	waitForTaskCompletion(): Promise<void> {
+		return new Promise((resolve, reject) => {
+			const disposeCompleted = this.client.on("taskCompleted", () => {
+				cleanup()
+				resolve()
+			})
+
+			const disposeErrored = this.client.on("error", (error) => {
+				cleanup()
+				reject(error)
+			})
+
+			let messageHandler: ((message: ClineMessage) => void) | null = null
+
+			if (this.options.exitOnError) {
+				messageHandler = (message: ClineMessage) => {
+					if (message.type === "say" && message.say === "api_req_retry_delayed") {
+						cleanup()
+						reject(new Error(message.text?.split("\n")[0] || "API request failed"))
+					}
+				}
+
+				this.client.on("message", messageHandler)
+			}
+
+			const cleanup = () => {
+				disposeCompleted()
+				disposeErrored()
+				if (messageHandler) {
+					this.client.off("message", messageHandler)
+				}
+			}
+		})
+	}
+
+	runTask(prompt: string, taskId?: string, configuration?: RooCodeSettings, images?: string[]): Promise<void> {
+		return this.startTask(prompt, taskId, configuration, images).then(() => this.waitForTaskCompletion())
 	}
 
 	resumeTask(taskId: string): Promise<void> {
-		this.sendToRuntime({ type: "showTaskWithId", text: taskId })
-		return this.waitForTaskCompletion()
+		return this.showTask(taskId).then(() => this.waitForTaskCompletion())
 	}
 
 	refreshCliMetadata(): void {
@@ -264,7 +310,7 @@ export class BundleApiCliRuntime implements CliRuntime {
 	}
 
 	selectTask(taskId: string): void {
-		this.sendToRuntime({ type: "showTaskWithId", text: taskId })
+		void this.showTask(taskId)
 	}
 
 	setMode(modeSlug: string): void {
@@ -734,9 +780,13 @@ export class BundleApiCliRuntime implements CliRuntime {
 	}
 
 	private sendToRuntime(message: WebviewMessage): void {
-		void this.handleWebviewMessage(message).catch((error) => {
+		void this.dispatchToRuntime(message).catch((error) => {
 			this.emitRuntimeError(error)
 		})
+	}
+
+	private async dispatchToRuntime(message: WebviewMessage): Promise<void> {
+		await this.handleWebviewMessage(message)
 	}
 
 	private handleRuntimeMessage(message: ExtensionMessage): void {
@@ -751,41 +801,6 @@ export class BundleApiCliRuntime implements CliRuntime {
 		for (const listener of this.runtimeErrorListeners) {
 			listener(normalized)
 		}
-	}
-
-	private waitForTaskCompletion(): Promise<void> {
-		return new Promise((resolve, reject) => {
-			const disposeCompleted = this.client.on("taskCompleted", () => {
-				cleanup()
-				resolve()
-			})
-
-			const disposeErrored = this.client.on("error", (error) => {
-				cleanup()
-				reject(error)
-			})
-
-			let messageHandler: ((message: ClineMessage) => void) | null = null
-
-			if (this.options.exitOnError) {
-				messageHandler = (message: ClineMessage) => {
-					if (message.type === "say" && message.say === "api_req_retry_delayed") {
-						cleanup()
-						reject(new Error(message.text?.split("\n")[0] || "API request failed"))
-					}
-				}
-
-				this.client.on("message", messageHandler)
-			}
-
-			const cleanup = () => {
-				disposeCompleted()
-				disposeErrored()
-				if (messageHandler) {
-					this.client.off("message", messageHandler)
-				}
-			}
-		})
 	}
 
 	private setupQuietMode(): void {

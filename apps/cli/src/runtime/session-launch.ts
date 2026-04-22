@@ -37,7 +37,7 @@ export interface ActivateCliRuntimeSessionOptions {
 }
 
 export interface RunInitialSessionLaunchOptions {
-	runtime: Pick<CliRuntime, "runTask" | "resumeTask">
+	runtime: Pick<CliRuntime, "startTask" | "showTask" | "waitForTaskCompletion">
 	launch: InitialSessionLaunch
 	onStart?: (launch: Extract<InitialSessionLaunch, { kind: "start" }>) => void | Promise<void>
 	onResume?: (launch: Extract<InitialSessionLaunch, { kind: "resume" }>) => void | Promise<void>
@@ -160,7 +160,8 @@ export async function runInitialSessionLaunch({
 				return
 			}
 
-			await runtime.resumeTask(launch.sessionId)
+			await runtime.showTask(launch.sessionId)
+			await runtime.waitForTaskCompletion()
 			return
 		case "start":
 			if (onStart) {
@@ -168,7 +169,8 @@ export async function runInitialSessionLaunch({
 				return
 			}
 
-			await runtime.runTask(launch.prompt, launch.taskId)
+			await runtime.startTask(launch.prompt, launch.taskId)
+			await runtime.waitForTaskCompletion()
 			return
 		case "idle":
 			await onIdle?.(launch)

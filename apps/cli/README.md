@@ -36,6 +36,11 @@ with only surface-specific rendering above that layer. Print-mode terminal outpu
 and approval prompting now also live in an explicit CLI text surface instead of
 being hidden inside the runtime backend, so the runtime boundary is closer to
 transport/session only.
+Task launch and task completion are now also separate runtime concerns, so the
+TUI can start or reattach to work without inheriting print-mode "block until
+the task ends" semantics from the backend. The stdin-stream control path now
+uses that same explicit launch/show/wait split instead of relying on a hidden
+combined task primitive.
 The remaining non-interactive shell loop now also lives in a dedicated CLI
 runner instead of being inlined inside `run.ts`, so signal handling, cleanup,
 JSON emitter attachment, and stdin-stream settlement are owned by one module.

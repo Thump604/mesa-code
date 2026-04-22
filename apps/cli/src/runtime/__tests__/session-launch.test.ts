@@ -15,8 +15,9 @@ function createRuntimeHarness(taskHistory = [{ id: "latest", task: "task", ts: 1
 		onTaskCompleted: vi.fn(),
 		onError: vi.fn(),
 		readTaskHistory: vi.fn().mockResolvedValue(taskHistory),
-		runTask: vi.fn().mockResolvedValue(undefined),
-		resumeTask: vi.fn().mockResolvedValue(undefined),
+		startTask: vi.fn().mockResolvedValue(undefined),
+		showTask: vi.fn().mockResolvedValue(undefined),
+		waitForTaskCompletion: vi.fn().mockResolvedValue(undefined),
 	}
 }
 
@@ -92,8 +93,9 @@ describe("runInitialSessionLaunch", () => {
 			},
 		})
 
-		expect(runtime.runTask).toHaveBeenCalledWith("Explain the current architecture", "task-123")
-		expect(runtime.resumeTask).not.toHaveBeenCalled()
+		expect(runtime.startTask).toHaveBeenCalledWith("Explain the current architecture", "task-123")
+		expect(runtime.waitForTaskCompletion).toHaveBeenCalledOnce()
+		expect(runtime.showTask).not.toHaveBeenCalled()
 	})
 
 	it("resumes the selected session for resume launches", async () => {
@@ -107,8 +109,9 @@ describe("runInitialSessionLaunch", () => {
 			},
 		})
 
-		expect(runtime.resumeTask).toHaveBeenCalledWith("task-456")
-		expect(runtime.runTask).not.toHaveBeenCalled()
+		expect(runtime.showTask).toHaveBeenCalledWith("task-456")
+		expect(runtime.waitForTaskCompletion).toHaveBeenCalledOnce()
+		expect(runtime.startTask).not.toHaveBeenCalled()
 	})
 
 	it("does nothing for idle launches", async () => {
@@ -120,8 +123,9 @@ describe("runInitialSessionLaunch", () => {
 				launch: { kind: "idle" },
 			}),
 		).resolves.toBeUndefined()
-		expect(runtime.runTask).not.toHaveBeenCalled()
-		expect(runtime.resumeTask).not.toHaveBeenCalled()
+		expect(runtime.startTask).not.toHaveBeenCalled()
+		expect(runtime.showTask).not.toHaveBeenCalled()
+		expect(runtime.waitForTaskCompletion).not.toHaveBeenCalled()
 	})
 
 	it("uses custom resume and start handlers when provided", async () => {
@@ -157,8 +161,9 @@ describe("runInitialSessionLaunch", () => {
 			kind: "resume",
 			sessionId: "task-456",
 		})
-		expect(runtime.runTask).not.toHaveBeenCalled()
-		expect(runtime.resumeTask).not.toHaveBeenCalled()
+		expect(runtime.startTask).not.toHaveBeenCalled()
+		expect(runtime.showTask).not.toHaveBeenCalled()
+		expect(runtime.waitForTaskCompletion).not.toHaveBeenCalled()
 	})
 })
 
@@ -237,6 +242,7 @@ describe("startCliRuntimeSession", () => {
 			kind: "resume",
 			sessionId: "task-new",
 		})
-		expect(runtime.resumeTask).not.toHaveBeenCalled()
+		expect(runtime.showTask).not.toHaveBeenCalled()
+		expect(runtime.waitForTaskCompletion).not.toHaveBeenCalled()
 	})
 })

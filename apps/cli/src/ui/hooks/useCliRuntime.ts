@@ -147,7 +147,7 @@ export function useCliRuntime({
 
 		const taskId = pendingInitialTaskIdRef.current
 		pendingInitialTaskIdRef.current = undefined
-		return sessionControllerRef.current.runTask(prompt, taskId)
+		return sessionControllerRef.current.startTask(prompt, taskId)
 	}, [])
 
 	const refreshCliMetadata = useCallback(() => {

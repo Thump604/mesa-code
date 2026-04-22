@@ -31,6 +31,9 @@ export interface CliRuntimeOptions {
 
 export interface CliRuntime {
 	activate(): Promise<void>
+	startTask(prompt: string, taskId?: string, configuration?: RooCodeSettings, images?: string[]): Promise<void>
+	showTask(taskId: string): Promise<void>
+	waitForTaskCompletion(): Promise<void>
 	runTask(prompt: string, taskId?: string, configuration?: RooCodeSettings, images?: string[]): Promise<void>
 	resumeTask(taskId: string): Promise<void>
 	refreshCliMetadata(): void

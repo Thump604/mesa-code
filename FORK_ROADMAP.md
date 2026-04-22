@@ -167,6 +167,7 @@ Goal: stop treating the CLI as a thin shell around the extension runtime.
 - share one runtime-backed session runner across TUI and non-interactive surfaces so `start`, `resume`, and `continue` create, resolve, and execute through the same contract
 - move lifecycle and action wiring behind a shared CLI session controller so TUI, print mode, and stdin-stream stop hand-owning separate runtime/disposal logic
 - move launch, completion, error, and resume orchestration behind a shared session-lifecycle contract so TUI and non-interactive surfaces differ only in rendering
+- split task launch/reattach from completion waiting so TUI and non-interactive surfaces share the same task primitives without forcing the same blocking behavior
 - move non-interactive text output and ask handling into an explicit CLI surface so the runtime backend stops doing hidden terminal I/O on behalf of print mode
 - move the non-interactive shell loop into a dedicated CLI runner so signal handling, cleanup, json emission, and stdin-stream settlement stop living inside `run.ts`
 - keep live smoke acceptance for both TUI and non-interactive surfaces so refactors are gated by real terminal behavior against a real local runtime

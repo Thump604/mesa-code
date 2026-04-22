@@ -617,7 +617,7 @@ export async function runStdinStreamMode({ runtime, jsonEmitter, setStreamReques
 
 			switch (stdinCommand.command) {
 				case "start": {
-					// A task can emit completion events before runTask() finalizers run.
+					// A task can emit completion events before the launch/wait chain fully settles.
 					// Wait for full settlement to avoid false "task_busy" on immediate next start.
 					// Safe from races: `for await` processes stdin commands serially, so no
 					// concurrent command can mutate state between the check and the await.
@@ -665,7 +665,8 @@ export async function runStdinStreamMode({ runtime, jsonEmitter, setStreamReques
 					}
 
 					activeTaskPromise = runtime
-						.runTask(stdinCommand.prompt, latestTaskId, taskConfiguration, stdinCommand.images)
+						.startTask(stdinCommand.prompt, latestTaskId, taskConfiguration, stdinCommand.images)
+						.then(() => runtime.waitForTaskCompletion())
 						.catch((error) => {
 							const message = error instanceof Error ? error.message : String(error)
 

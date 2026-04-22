@@ -5,6 +5,9 @@ import { CliSessionController } from "../session-controller.js"
 function createRuntimeHarness(taskHistory = [{ id: "latest", task: "task", ts: 100, workspace: "/workspace" }]) {
 	return {
 		activate: vi.fn().mockResolvedValue(undefined),
+		startTask: vi.fn().mockResolvedValue(undefined),
+		showTask: vi.fn().mockResolvedValue(undefined),
+		waitForTaskCompletion: vi.fn().mockResolvedValue(undefined),
 		runTask: vi.fn().mockResolvedValue(undefined),
 		resumeTask: vi.fn().mockResolvedValue(undefined),
 		refreshCliMetadata: vi.fn(),
@@ -83,6 +86,9 @@ describe("CliSessionController", () => {
 		})
 
 		controller.refreshCliMetadata()
+		await controller.startTask("Summarize", "task-456")
+		await controller.showTask("task-123")
+		await controller.waitForTaskCompletion()
 		controller.selectTask("task-123")
 		controller.setMode("architect")
 		controller.searchFiles("@runtime")
@@ -93,6 +99,9 @@ describe("CliSessionController", () => {
 		controller.reject()
 		controller.cancelTask()
 
+		expect(runtime.startTask).toHaveBeenCalledWith("Summarize", "task-456")
+		expect(runtime.showTask).toHaveBeenCalledWith("task-123")
+		expect(runtime.waitForTaskCompletion).toHaveBeenCalledOnce()
 		expect(runtime.refreshCliMetadata).toHaveBeenCalledOnce()
 		expect(runtime.selectTask).toHaveBeenCalledWith("task-123")
 		expect(runtime.setMode).toHaveBeenCalledWith("architect")

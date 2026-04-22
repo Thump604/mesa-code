@@ -158,6 +158,25 @@ describe("BundleApiCliRuntime", () => {
 		await runtime.dispose()
 	})
 
+	it("separates task launch from completion waiting", async () => {
+		const { runtime, startNewTask, resumeTask } = createRuntimeHarness()
+
+		await runtime.activate()
+
+		await runtime.startTask("launch only", "task-launch")
+		await runtime.showTask("task-resume")
+
+		expect(startNewTask).toHaveBeenCalledWith({
+			configuration: {},
+			text: "launch only",
+			images: undefined,
+			newTab: undefined,
+		})
+		expect(resumeTask).toHaveBeenCalledWith("task-resume")
+
+		await runtime.dispose()
+	})
+
 	it("exposes runtime state helpers and json emitter attachment", async () => {
 		const { runtime, api } = createRuntimeHarness()
 		const attachToClient = vi.fn()
