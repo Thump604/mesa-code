@@ -1,5 +1,8 @@
 # Runtime Requests For Zero-Friction Local AI
 
+Companion audit and implementation split:
+[`RUNTIME_CONTROL_PLANE_GAP_ANALYSIS.md`](./RUNTIME_CONTROL_PLANE_GAP_ANALYSIS.md)
+
 ## Purpose
 
 This fork is trying to become a local/private-first coding CLI. The biggest

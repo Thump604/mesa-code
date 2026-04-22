@@ -154,6 +154,11 @@ instead of just pointing at an endpoint. `roo use` saves the profile, launches
 or reuses a managed `vllm-mlx` process, swaps the active model by restarting
 that managed lane when needed, and keeps runtime logs/state under `~/.roo/`.
 
+That is the current first slice, not the full production control plane yet. The
+gap between today’s CLI-owned managed lane and the target runtime/ops contract
+is tracked in
+[`RUNTIME_CONTROL_PLANE_GAP_ANALYSIS.md`](../../RUNTIME_CONTROL_PLANE_GAP_ANALYSIS.md).
+
 ```bash
 # Start or swap the managed vllm-mlx lane.
 roo use \

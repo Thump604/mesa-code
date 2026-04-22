@@ -17,6 +17,10 @@ The final product name and package namespace are still pending. Until that is
 decided, this repo uses a temporary fork identity and documents the migration
 away from the original cloud-shaped product model.
 
+For the runtime control-plane gap between the current CLI slice and the target
+production contract, see
+[RUNTIME_CONTROL_PLANE_GAP_ANALYSIS.md](RUNTIME_CONTROL_PLANE_GAP_ANALYSIS.md).
+
 ## Current Focus
 
 The immediate goal is to turn the existing Roo CLI and runtime into a serious
