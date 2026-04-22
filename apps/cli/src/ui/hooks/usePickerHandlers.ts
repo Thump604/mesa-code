@@ -1,5 +1,4 @@
 import { useCallback } from "react"
-import type { WebviewMessage } from "@roo-code/types"
 
 import type {
 	AutocompletePickerState,
@@ -15,7 +14,8 @@ export interface UsePickerHandlersOptions {
 	autocompleteRef: React.RefObject<AutocompleteInputHandle<any>>
 	// eslint-disable-next-line @typescript-eslint/no-explicit-any
 	followupAutocompleteRef: React.RefObject<AutocompleteInputHandle<any>>
-	sendRuntimeMessage: ((msg: WebviewMessage) => void) | null
+	setMode: ((modeSlug: string) => void) | null
+	selectTask: ((taskId: string) => void) | null
 	showInfo: (msg: string, duration?: number) => void
 	seenMessageIds: React.MutableRefObject<Set<string>>
 	firstTextMessageSkipped: React.MutableRefObject<boolean>
@@ -43,7 +43,8 @@ export interface UsePickerHandlersReturn {
 export function usePickerHandlers({
 	autocompleteRef,
 	followupAutocompleteRef,
-	sendRuntimeMessage,
+	setMode,
+	selectTask,
 	showInfo,
 	seenMessageIds,
 	firstTextMessageSkipped,
@@ -72,8 +73,8 @@ export function usePickerHandlers({
 			if (pickerState.activeTrigger?.id === "mode" && item && typeof item === "object" && "slug" in item) {
 				const modeItem = item as ModeResult
 
-				if (sendRuntimeMessage) {
-					sendRuntimeMessage({ type: "mode", text: modeItem.slug })
+				if (setMode) {
+					setMode(modeItem.slug)
 				}
 
 				autocompleteRef.current?.closePicker()
@@ -99,7 +100,7 @@ export function usePickerHandlers({
 				}
 
 				// Ask the runtime to switch to the selected task history entry.
-				if (sendRuntimeMessage) {
+				if (selectTask) {
 					// Use selective reset that preserves global state (taskHistory, modes, commands)
 					useCLIStore.getState().resetForTaskSwitch()
 					// Set the resuming flag so message handlers know we're resuming
@@ -113,7 +114,7 @@ export function usePickerHandlers({
 
 					// This triggers createTaskWithHistoryItem -> postStateToWebview,
 					// which includes clineMessages and handles mode restoration.
-					sendRuntimeMessage({ type: "showTaskWithId", text: historyItem.id })
+					selectTask(historyItem.id)
 				}
 
 				// Close the picker
@@ -131,7 +132,8 @@ export function usePickerHandlers({
 			showInfo,
 			currentTaskId,
 			setCurrentTaskId,
-			sendRuntimeMessage,
+			setMode,
+			selectTask,
 			autocompleteRef,
 			followupAutocompleteRef,
 			seenMessageIds,

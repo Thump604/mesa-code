@@ -1,6 +1,5 @@
 import { useEffect, useRef } from "react"
 import { useInput } from "ink"
-import type { WebviewMessage } from "@roo-code/types"
 
 import { matchesGlobalSequence } from "@/lib/utils/input.js"
 
@@ -15,7 +14,8 @@ export interface UseGlobalInputOptions {
 	availableModes: ModeResult[]
 	currentMode: string | null
 	mode: string
-	sendRuntimeMessage: ((msg: WebviewMessage) => void) | null
+	setMode: ((modeSlug: string) => void) | null
+	cancelTask: (() => void) | null
 	showInfo: (msg: string, duration?: number) => void
 	exit: () => void
 	cleanup: () => Promise<void>
@@ -40,7 +40,8 @@ export function useGlobalInput({
 	availableModes,
 	currentMode,
 	mode,
-	sendRuntimeMessage,
+	setMode,
+	cancelTask,
 	showInfo,
 	exit,
 	cleanup,
@@ -97,8 +98,8 @@ export function useGlobalInput({
 			const nextIndex = currentIndex === -1 ? 0 : (currentIndex + 1) % availableModes.length
 			const nextMode = availableModes[nextIndex]
 
-			if (nextMode && sendRuntimeMessage) {
-				sendRuntimeMessage({ type: "mode", text: nextMode.slug })
+			if (nextMode && setMode) {
+				setMode(nextMode.slug)
 				showInfo(`Switched to ${nextMode.name}`, 2000)
 			}
 
@@ -127,13 +128,13 @@ export function useGlobalInput({
 		}
 
 		// Escape key to cancel/pause task when loading (streaming)
-		if (key.escape && isLoading && sendRuntimeMessage) {
+		if (key.escape && isLoading && cancelTask) {
 			// If picker is open, let the picker handle escape first
 			if (pickerIsOpen) {
 				return
 			}
-			// Send cancel message to extension (same as webview-ui Cancel button)
-			sendRuntimeMessage({ type: "cancelTask" })
+			// Interrupt the active task.
+			cancelTask()
 			return
 		}
 

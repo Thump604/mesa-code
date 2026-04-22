@@ -36,5 +36,5 @@ export async function saveSettings(settings: Partial<CliSettings>): Promise<void
 }
 
 export async function resetOnboarding(): Promise<void> {
-	await saveSettings({ onboardingProviderChoice: undefined })
+	await saveSettings({ onboardingProviderChoice: undefined, hasCompletedOnboarding: undefined })
 }

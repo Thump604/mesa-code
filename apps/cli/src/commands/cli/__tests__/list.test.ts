@@ -1,5 +1,5 @@
 import { readWorkspaceTaskSessions } from "@/lib/task-history/index.js"
-import { loadSettings, loadToken } from "@/lib/storage/index.js"
+import { loadSettings } from "@/lib/storage/index.js"
 
 import { listCommands, listModels, listModes, listSessions, parseFormat } from "../list.js"
 
@@ -16,7 +16,6 @@ vi.mock("@/lib/storage/index.js", async (importOriginal) => {
 	return {
 		...actual,
 		loadSettings: vi.fn().mockResolvedValue({}),
-		loadToken: vi.fn().mockResolvedValue(null),
 	}
 })
 
@@ -74,7 +73,6 @@ describe("list commands, modes, models, sessions", () => {
 	beforeEach(() => {
 		vi.clearAllMocks()
 		vi.mocked(loadSettings).mockResolvedValue({})
-		vi.mocked(loadToken).mockResolvedValue(null)
 	})
 
 	const captureStdout = async (fn: () => Promise<void>): Promise<string> => {

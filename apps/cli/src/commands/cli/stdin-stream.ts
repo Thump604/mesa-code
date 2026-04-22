@@ -762,12 +762,7 @@ export async function runStdinStreamMode({ runtime, jsonEmitter, setStreamReques
 
 					if (shouldSendAsAskResponse) {
 						// Match webview behavior: if there is an active ask, route message directly as an ask response.
-						runtime.sendMessage({
-							type: "askResponse",
-							askResponse: "messageResponse",
-							text: stdinCommand.prompt,
-							images: stdinCommand.images,
-						})
+						runtime.sendTaskMessage(stdinCommand.prompt, stdinCommand.images)
 
 						setStreamRequestId(stdinCommand.requestId)
 						jsonEmitter.emitControl({
@@ -783,11 +778,7 @@ export async function runStdinStreamMode({ runtime, jsonEmitter, setStreamReques
 						break
 					}
 
-					runtime.sendMessage({
-						type: "queueMessage",
-						text: stdinCommand.prompt,
-						images: stdinCommand.images,
-					})
+					runtime.queueMessage(stdinCommand.prompt, stdinCommand.images)
 					pendingQueuedMessageRequestIds.push(stdinCommand.requestId)
 					if (runtime.isWaitingForInput()) {
 						setStreamRequestId(stdinCommand.requestId)

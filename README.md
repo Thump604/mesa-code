@@ -45,9 +45,10 @@ What is already in motion on the fork branch:
 
 What is next:
 
-- cloud-auth removal from normal CLI flows
+- bundle-API runtime backend instead of direct `ExtensionHost` control
+- CLI-owned workspace file search/autocomplete instead of extension-side lookup
 - Anthropic-compatible model discovery/listing
-- CLI-native runtime separation from the extension host
+- fully CLI-native execution core beyond the transitional bundle backend
 - local doctor/bootstrap flows
 - stronger migration/import from Roo local settings
 
@@ -139,7 +140,7 @@ The intended compatibility model is:
 
 - preserve useful Roo session/config migration paths
 - preserve structured CLI output contracts
-- reduce cloud coupling over time
+- remove Roo cloud-auth assumptions from the CLI surface
 - treat local/self-hosted runtimes as the primary product surface
 
 This repo is not promising extension parity first.

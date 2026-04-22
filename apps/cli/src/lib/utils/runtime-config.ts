@@ -93,7 +93,6 @@ export function resolveConfiguredBaseUrl(
 export function resolveEffectiveProvider(
 	flagProvider: SupportedProvider | undefined,
 	settings: CliSettings,
-	rooTokenAvailable: boolean,
 	protocol: SupportedApiStandard,
 	runtime: SupportedLocalRuntime | undefined,
 ): SupportedProvider {
@@ -101,7 +100,7 @@ export function resolveEffectiveProvider(
 		return flagProvider
 	}
 
-	if (settings.provider) {
+	if (settings.provider && settings.provider !== "roo") {
 		return settings.provider
 	}
 
@@ -109,7 +108,7 @@ export function resolveEffectiveProvider(
 		return protocol === "anthropic" ? "anthropic" : "openai"
 	}
 
-	return rooTokenAvailable ? "roo" : "openrouter"
+	return protocol === "anthropic" ? "anthropic" : "openai"
 }
 
 export function resolveEffectiveModel(

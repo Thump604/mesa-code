@@ -69,7 +69,19 @@ export async function runStreamCase(options: RunStreamCaseOptions): Promise<void
 
 	const child = execa(
 		"pnpm",
-		["dev", "--print", "--stdin-prompt-stream", "--provider", "roo", "--output-format", "stream-json"],
+		[
+			"dev",
+			"--print",
+			"--stdin-prompt-stream",
+			"--provider",
+			"openai",
+			"--base-url",
+			process.env.OPENAI_BASE_URL ?? "http://127.0.0.1:8080/v1",
+			"--model",
+			process.env.OPENAI_MODEL ?? "qwen3-coder",
+			"--output-format",
+			"stream-json",
+		],
 		{
 			cwd: cliRoot,
 			stdin: "pipe",

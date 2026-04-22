@@ -147,6 +147,7 @@ Exit criteria:
 - first run works without cloud account creation
 - local model endpoint is the default documented path
 - no forced hosted dependency remains in the CLI happy path
+- Roo cloud auth is not part of the supported CLI command surface
 
 ### Phase 3: CLI Replatform
 
@@ -154,6 +155,9 @@ Goal: stop treating the CLI as a thin shell around the extension runtime.
 
 - carve out a CLI-native execution core
 - introduce a CLI-owned `CliRuntime` boundary so `run`, TUI, and stdin-stream stop depending directly on the VS Code host API
+- move task/session/mode/search operations behind CLI-owned runtime methods instead of raw webview-message verbs
+- use the activated extension bundle API as a transitional backend instead of the fake webview transport while the CLI-native engine is carved out
+- keep search/autocomplete paths moving to CLI-owned modules first so interactive UX stops depending on extension-side helpers
 - move session storage and state handling into CLI-owned modules
 - replace extension-host mediated discovery and control paths with direct CLI-owned implementations
 - keep structured output modes stable: text, json, stream-json
@@ -257,7 +261,7 @@ Exit criteria:
 ### Release B: Private Default
 
 - local endpoint defaults
-- cloud auth removed from normal CLI path
+- cloud auth removed from the CLI surface
 - telemetry off by default
 - migration guide for Roo users
 
@@ -292,7 +296,7 @@ If it becomes "Roo maintenance with less momentum," stop.
 
 ## Immediate Next Decisions
 
-1. Decide whether the fork is CLI-only for v1 or CLI-plus-extension continuity.
-2. Decide final product name and package namespace.
-3. Decide whether to preserve Roo config format directly or support one-way import only.
-4. Decide whether to keep MCP on by default or require explicit enablement in the fork.
+1. Finalize product name and package namespace.
+2. Decide whether to preserve Roo config format directly or support one-way import only.
+3. Decide whether to keep MCP on by default or require explicit enablement in the fork.
+4. Finish replacing the transitional extension-backed runtime implementation behind `CliRuntime`.

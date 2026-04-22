@@ -12,23 +12,19 @@ import {
 	isSupportedApiStandard,
 	isSupportedLocalRuntime,
 	isSupportedProvider,
-	OnboardingProviderChoice,
 	supportedProviders,
 	supportedApiStandards,
 	supportedLocalRuntimes,
 	DEFAULT_FLAGS,
 	REASONING_EFFORTS,
-	SDK_BASE_URL,
 	OutputFormat,
 } from "@/types/index.js"
 import { isValidOutputFormat } from "@/types/json-events.js"
 import { JsonEventEmitter } from "@/agent/json-event-emitter.js"
 import { createCliRuntime, type CliRuntime, type CliRuntimeOptions } from "@/runtime/index.js"
 
-import { createClient } from "@/lib/sdk/index.js"
-import { loadToken, loadSettings } from "@/lib/storage/index.js"
+import { loadSettings } from "@/lib/storage/index.js"
 import { readWorkspaceTaskSessions, resolveWorkspaceResumeSessionId } from "@/lib/task-history/index.js"
-import { isRecord } from "@/lib/utils/guards.js"
 import { getEnvVarName, getApiKeyFromEnv } from "@/lib/utils/provider.js"
 import {
 	resolveConfiguredApiKey,
@@ -48,7 +44,6 @@ import { isExpectedControlFlowError } from "./cancellation.js"
 import { runStdinStreamMode } from "./stdin-stream.js"
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
-const ROO_MODEL_WARMUP_TIMEOUT_MS = 10_000
 const SIGNAL_ONLY_EXIT_KEEPALIVE_MS = 60_000
 const STREAM_RESUME_WAIT_TIMEOUT_MS = 2_000
 
@@ -89,7 +84,7 @@ function validateProtocolAndRuntime(flagOptions: FlagOptions) {
 }
 
 async function bootstrapResumeForStdinStream(runtime: CliRuntime, sessionId: string): Promise<void> {
-	runtime.sendMessage({ type: "showTaskWithId", text: sessionId })
+	runtime.selectTask(sessionId)
 
 	// Best-effort wait so early stdin "message" commands can target the resumed task.
 	await pWaitFor(() => runtime.hasActiveTask() || runtime.isWaitingForInput(), {
@@ -100,60 +95,6 @@ async function bootstrapResumeForStdinStream(runtime: CliRuntime, sessionId: str
 
 function normalizeError(error: unknown): Error {
 	return error instanceof Error ? error : new Error(String(error))
-}
-
-async function warmRooModels(runtime: CliRuntime): Promise<void> {
-	await new Promise<void>((resolve, reject) => {
-		let settled = false
-		let offRuntimeMessage = () => {}
-
-		const cleanup = () => {
-			clearTimeout(timeoutId)
-			offRuntimeMessage()
-		}
-
-		const finish = (fn: () => void) => {
-			if (settled) return
-			settled = true
-			cleanup()
-			fn()
-		}
-
-		const onMessage = (message: unknown) => {
-			if (!isRecord(message)) {
-				return
-			}
-
-			if (message.type !== "singleRouterModelFetchResponse") {
-				return
-			}
-
-			const values = isRecord(message.values) ? message.values : undefined
-
-			if (values?.provider !== "roo") {
-				return
-			}
-
-			if (message.success === false) {
-				const errorMessage =
-					typeof message.error === "string" && message.error.length > 0
-						? message.error
-						: "failed to refresh Roo models"
-
-				finish(() => reject(new Error(errorMessage)))
-				return
-			}
-
-			finish(() => resolve())
-		}
-
-		const timeoutId = setTimeout(() => {
-			finish(() => reject(new Error(`timed out waiting for Roo models after ${ROO_MODEL_WARMUP_TIMEOUT_MS}ms`)))
-		}, ROO_MODEL_WARMUP_TIMEOUT_MS)
-
-		offRuntimeMessage = runtime.onMessage(onMessage)
-		runtime.sendMessage({ type: "requestRooModels" })
-	})
 }
 
 export async function run(promptArg: string | undefined, flagOptions: FlagOptions) {
@@ -220,7 +161,6 @@ export async function run(promptArg: string | undefined, flagOptions: FlagOption
 
 	// Options
 
-	let rooToken = await loadToken()
 	const settings = await loadSettings()
 
 	const isTuiSupported = process.stdin.isTTY && process.stdout.isTTY
@@ -233,7 +173,6 @@ export async function run(promptArg: string | undefined, flagOptions: FlagOption
 	const effectiveProvider = resolveEffectiveProvider(
 		flagOptions.provider,
 		settings,
-		Boolean(rooToken),
 		effectiveProtocol,
 		effectiveRuntime,
 	)
@@ -245,8 +184,16 @@ export async function run(promptArg: string | undefined, flagOptions: FlagOption
 		effectiveBaseUrl,
 		effectiveRuntime,
 	)
+	const hasExplicitProvider =
+		flagOptions.provider !== undefined || (settings.provider !== undefined && settings.provider !== "roo")
 	const isOnboardingEnabled =
-		isTuiEnabled && !rooToken && !flagOptions.provider && !settings.provider && effectiveProvider === "openrouter"
+		isTuiEnabled &&
+		!settings.hasCompletedOnboarding &&
+		!settings.onboardingProviderChoice &&
+		!hasExplicitProvider &&
+		!effectiveBaseUrl &&
+		!effectiveRuntime &&
+		effectiveProvider === "openai"
 	const effectiveReasoningEffort =
 		flagOptions.reasoningEffort || settings.reasoningEffort || DEFAULT_FLAGS.reasoningEffort
 	const effectiveWorkspacePath = flagOptions.workspace ? path.resolve(flagOptions.workspace) : process.cwd()
@@ -297,49 +244,8 @@ export async function run(promptArg: string | undefined, flagOptions: FlagOption
 		terminalShell,
 	}
 
-	// Roo compatibility auth remains available, but local/self-hosted usage is the preferred CLI path.
-
 	if (isOnboardingEnabled) {
-		let { onboardingProviderChoice } = settings
-
-		if (!onboardingProviderChoice) {
-			const { choice, token } = await runOnboarding()
-			onboardingProviderChoice = choice
-			rooToken = token ?? null
-		}
-
-		if (onboardingProviderChoice === OnboardingProviderChoice.Roo) {
-			runtimeOptions.provider = "roo"
-		}
-	}
-
-	if (runtimeOptions.provider === "roo") {
-		if (rooToken) {
-			try {
-				const client = createClient({ url: SDK_BASE_URL, authToken: rooToken })
-				const me = await client.auth.me.query()
-
-				if (me?.type !== "user") {
-					throw new Error("Invalid token")
-				}
-
-				runtimeOptions.apiKey = rooToken
-				runtimeOptions.user = me.user
-			} catch {
-				// If an explicit API key was provided via flag or env var, fall through
-				// to the general API key resolution below instead of exiting.
-				if (!flagOptions.apiKey && !getApiKeyFromEnv(runtimeOptions.provider)) {
-					console.error("[CLI] Your Roo compatibility token is not valid.")
-					console.error("[CLI] Please run: roo auth login")
-					console.error(
-						"[CLI] Or switch to a local/self-hosted provider with --provider/--runtime/--base-url.",
-					)
-					process.exit(1)
-				}
-			}
-		}
-		// If no rooToken, fall through to the general API key resolution below
-		// which will check flagOptions.apiKey and ROO_API_KEY env var.
+		await runOnboarding()
 	}
 
 	// Validations
@@ -364,20 +270,34 @@ export async function run(promptArg: string | undefined, flagOptions: FlagOption
 		)
 
 	if ((runtimeOptions.provider === "openai" || runtimeOptions.provider === "anthropic") && !runtimeOptions.model) {
-		const providerLabel =
-			effectiveRuntime && flagOptions.provider === undefined && settings.provider === undefined
-				? `${effectiveRuntime} (${runtimeOptions.provider}-compatible)`
-				: runtimeOptions.provider
+		const providerLabel = effectiveRuntime
+			? `${effectiveRuntime} (${runtimeOptions.provider}-compatible)`
+			: runtimeOptions.provider
+		const defaultBaseUrlEnvName = runtimeOptions.provider === "anthropic" ? "ANTHROPIC_BASE_URL" : "OPENAI_BASE_URL"
 		console.error(`[CLI] Error: No model provided for ${providerLabel}.`)
-		console.error("[CLI] Use --model or set model defaults in cli-settings.json for your local/private runtime.")
+		if (!runtimeOptions.baseUrl && !hasExplicitProvider) {
+			console.error("[CLI] The default CLI contract expects a local/self-hosted endpoint.")
+			console.error(`[CLI] Set ${defaultBaseUrlEnvName} or use --base-url, then provide --model.`)
+			console.error("[CLI] Use --provider openrouter or another remote provider only when you intend to opt in.")
+		} else {
+			console.error(
+				"[CLI] Use --model or set model defaults in cli-settings.json for your local/private runtime.",
+			)
+		}
 		process.exit(1)
 	}
 
 	if (!runtimeOptions.apiKey) {
-		if (runtimeOptions.provider === "roo") {
-			console.error("[CLI] Error: Roo Cloud compatibility authentication failed or was cancelled.")
-			console.error("[CLI] Please run: roo auth login")
-			console.error("[CLI] Or switch to a local/self-hosted provider with --provider/--runtime/--base-url.")
+		if (
+			(runtimeOptions.provider === "openai" || runtimeOptions.provider === "anthropic") &&
+			!runtimeOptions.baseUrl &&
+			!hasExplicitProvider
+		) {
+			const defaultBaseUrlEnvName =
+				runtimeOptions.provider === "anthropic" ? "ANTHROPIC_BASE_URL" : "OPENAI_BASE_URL"
+			console.error("[CLI] Error: No local endpoint configured for the default CLI contract.")
+			console.error(`[CLI] Set ${defaultBaseUrlEnvName} or use --base-url, then provide --model.`)
+			console.error("[CLI] Use --provider openrouter or another remote provider only when you intend to opt in.")
 		} else {
 			console.error(
 				`[CLI] Error: No API key provided. Use --api-key or set the appropriate environment variable.`,
@@ -691,16 +611,6 @@ export async function run(promptArg: string | undefined, flagOptions: FlagOption
 
 		try {
 			await runtime.activate()
-			if (runtimeOptions.provider === "roo") {
-				try {
-					await warmRooModels(runtime)
-				} catch (warmupError) {
-					if (flagOptions.debug) {
-						const message = warmupError instanceof Error ? warmupError.message : String(warmupError)
-						console.error(`[CLI] Warning: Roo model warmup failed: ${message}`)
-					}
-				}
-			}
 
 			if (jsonEmitter) {
 				runtime.attachJsonEmitter(jsonEmitter)

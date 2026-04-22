@@ -9,14 +9,22 @@ The direction is:
 
 - local and self-hosted endpoints first
 - no mandatory cloud account for normal use
+- no Roo cloud auth commands in the supported CLI surface
 - `llama.cpp` and `vllm-mlx` as first-class runtimes
 - OpenAI-compatible and Anthropic-compatible endpoint support
+
+The default provider contract is now local OpenAI-compatible inference. Remote
+providers like `openrouter` are explicit opt-in via `--provider` or saved config.
 
 The transition is in progress. Discovery flows like `roo list commands`, `roo list modes`,
 `roo list models`, and `roo list sessions` are already CLI-native. Some interactive runtime
 paths still reuse upstream compatibility layers while that execution core is being pulled out,
-but interactive entrypoints now go through a CLI-owned runtime boundary instead of constructing
-the extension host directly at each call site.
+but interactive entrypoints now go through a CLI-owned runtime boundary that activates the
+extension bundle through its returned API surface instead of constructing `ExtensionHost`
+directly at each call site. Task selection, mode changes, and task-message submission are
+expressed as CLI-owned runtime operations rather than raw VS Code webview messages in the
+caller layer. Workspace file search for `@` mentions is also CLI-owned now, including
+ripgrep-backed indexing, fuzzy ranking, and `.rooignore` filtering.
 
 ## Installation
 
@@ -162,6 +170,22 @@ The CLI should not own model-serving telemetry for these runtimes. Use the
 metrics and observability surfaces exposed by `llama.cpp` and `vllm-mlx`
 themselves.
 
+### First-Run Local Contract
+
+If you do not explicitly choose a provider, the CLI assumes a local/self-hosted
+OpenAI-compatible endpoint. The simplest local setup is:
+
+```bash
+export OPENAI_BASE_URL=http://127.0.0.1:8080/v1
+roo --model qwen3-coder "Summarize the repository"
+```
+
+If you want a remote provider, make that choice explicit:
+
+```bash
+roo --provider openrouter --api-key "$OPENROUTER_API_KEY" --model anthropic/claude-sonnet-4 "Review the diff"
+```
+
 ### Stdin Stream Mode (`--stdin-prompt-stream`)
 
 For programmatic control (one process, multiple prompts), use `--stdin-prompt-stream` with `--print`.
@@ -174,86 +198,31 @@ printf '{"command":"start","requestId":"1","prompt":"1+1=?"}\n' | roo --print --
 printf '{"command":"start","requestId":"1","taskId":"018f7fc8-7c96-7f7c-98aa-2ec4ff7f6d87","prompt":"1+1=?"}\n' | roo --print --stdin-prompt-stream --output-format stream-json
 ```
 
-### Roo Cloud Compatibility Authentication
-
-If you explicitly need the legacy Roo-hosted compatibility path, you can still authenticate:
-
-```bash
-# Log in to Roo Cloud compatibility mode (opens browser)
-roo auth login
-
-# Check compatibility auth status
-roo auth status
-
-# Log out
-roo auth logout
-```
-
-The `auth login` command:
-
-1. Opens your browser to authenticate with Roo Cloud compatibility mode
-2. Receives a secure token via localhost callback
-3. Stores the token in `~/.config/roo/credentials.json`
-
-Tokens are valid for 90 days. The CLI will prompt you to re-authenticate when your token expires.
-
-Normal local/private usage should prefer `--provider`, `--runtime`, `--protocol`, `--base-url`,
-and provider environment variables instead of this flow.
-
-**Authentication Flow:**
-
-```
-┌──────┐         ┌─────────┐         ┌───────────────┐
-│  CLI │         │ Browser │         │ Roo Cloud     │
-└──┬───┘         └────┬────┘         └───────┬───────┘
-   │                  │                      │
-   │ Open auth URL    │                      │
-   │─────────────────>│                      │
-   │                  │                      │
-   │                  │ Authenticate         │
-   │                  │─────────────────────>│
-   │                  │                      │
-   │                  │<─────────────────────│
-   │                  │ Token via callback   │
-   │<─────────────────│                      │
-   │                  │                      │
-   │ Store token      │                      │
-   │                  │                      │
-```
-
 ## Options
 
-| Option                                  | Description                                                                             | Default                                 |
-| --------------------------------------- | --------------------------------------------------------------------------------------- | --------------------------------------- |
-| `[prompt]`                              | Your prompt (positional argument, optional)                                             | None                                    |
-| `--prompt-file <path>`                  | Read prompt from a file instead of command line argument                                | None                                    |
-| `--create-with-session-id <session-id>` | Create a new task using the provided session ID (UUID)                                  | None                                    |
-| `-w, --workspace <path>`                | Workspace path to operate in                                                            | Current directory                       |
-| `-p, --print`                           | Print response and exit (non-interactive mode)                                          | `false`                                 |
-| `--stdin-prompt-stream`                 | Read NDJSON control commands from stdin (requires `--print`)                            | `false`                                 |
-| `-d, --debug`                           | Enable debug output (includes detailed debug information, prompts, paths, etc)          | `false`                                 |
-| `-a, --require-approval`                | Require manual approval before actions execute                                          | `false`                                 |
-| `-k, --api-key <key>`                   | API key for the LLM provider                                                            | From env var                            |
-| `--provider <provider>`                 | API provider (roo, anthropic, openai, openrouter, etc.)                                 | Resolved from settings and local config |
-| `--protocol <protocol>`                 | API standard for local/self-hosted endpoints: `openai` or `anthropic`                   | `openai`                                |
-| `--runtime <runtime>`                   | Local runtime profile: `llama.cpp` or `vllm-mlx`                                        | None                                    |
-| `--base-url <url>`                      | Base URL for OpenAI- or Anthropic-compatible endpoints                                  | None                                    |
-| `-m, --model <model>`                   | Model to use                                                                            | Resolved from provider/runtime settings |
-| `--mode <mode>`                         | Mode to start in (code, architect, ask, debug, etc.)                                    | `code`                                  |
-| `--terminal-shell <path>`               | Absolute shell path for inline terminal command execution                               | Auto-detected shell                     |
-| `-r, --reasoning-effort <effort>`       | Reasoning effort level (unspecified, disabled, none, minimal, low, medium, high, xhigh) | `medium`                                |
-| `--consecutive-mistake-limit <n>`       | Consecutive error/repetition limit before guidance prompt (`0` disables the limit)      | `10`                                    |
-| `--ephemeral`                           | Run without persisting state (uses temporary storage)                                   | `false`                                 |
-| `--oneshot`                             | Exit upon task completion                                                               | `false`                                 |
-| `--output-format <format>`              | Output format with `--print`: `text`, `json`, or `stream-json`                          | `text`                                  |
-
-## Auth Commands
-
-| Command           | Description                                   |
-| ----------------- | --------------------------------------------- |
-| `roo auth login`  | Authenticate for Roo Cloud compatibility mode |
-| `roo auth logout` | Clear stored Roo compatibility token          |
-| `roo auth status` | Show current Roo compatibility auth status    |
+| Option                                  | Description                                                                             | Default                             |
+| --------------------------------------- | --------------------------------------------------------------------------------------- | ----------------------------------- |
+| `[prompt]`                              | Your prompt (positional argument, optional)                                             | None                                |
+| `--prompt-file <path>`                  | Read prompt from a file instead of command line argument                                | None                                |
+| `--create-with-session-id <session-id>` | Create a new task using the provided session ID (UUID)                                  | None                                |
+| `-w, --workspace <path>`                | Workspace path to operate in                                                            | Current directory                   |
+| `-p, --print`                           | Print response and exit (non-interactive mode)                                          | `false`                             |
+| `--stdin-prompt-stream`                 | Read NDJSON control commands from stdin (requires `--print`)                            | `false`                             |
+| `-d, --debug`                           | Enable debug output (includes detailed debug information, prompts, paths, etc)          | `false`                             |
+| `-a, --require-approval`                | Require manual approval before actions execute                                          | `false`                             |
+| `-k, --api-key <key>`                   | API key for the LLM provider                                                            | From env var                        |
+| `--provider <provider>`                 | API provider (openai, anthropic, openrouter, openai-native, etc.)                       | Resolved from flags/settings        |
+| `--protocol <protocol>`                 | API standard for local/self-hosted endpoints: `openai` or `anthropic`                   | `openai`                            |
+| `--runtime <runtime>`                   | Local runtime profile: `llama.cpp` or `vllm-mlx`                                        | None                                |
+| `--base-url <url>`                      | Base URL for OpenAI- or Anthropic-compatible endpoints                                  | None                                |
+| `-m, --model <model>`                   | Model to use                                                                            | Required for local runtime profiles |
+| `--mode <mode>`                         | Mode to start in (code, architect, ask, debug, etc.)                                    | `code`                              |
+| `--terminal-shell <path>`               | Absolute shell path for inline terminal command execution                               | Auto-detected shell                 |
+| `-r, --reasoning-effort <effort>`       | Reasoning effort level (unspecified, disabled, none, minimal, low, medium, high, xhigh) | `medium`                            |
+| `--consecutive-mistake-limit <n>`       | Consecutive error/repetition limit before guidance prompt (`0` disables the limit)      | `10`                                |
+| `--ephemeral`                           | Run without persisting state (uses temporary storage)                                   | `false`                             |
+| `--oneshot`                             | Exit upon task completion                                                               | `false`                             |
+| `--output-format <format>`              | Output format with `--print`: `text`, `json`, or `stream-json`                          | `text`                              |
 
 ## Environment Variables
 
@@ -261,7 +230,6 @@ The CLI will look for API keys in environment variables if not provided via `--a
 
 | Provider          | Environment Variable        |
 | ----------------- | --------------------------- |
-| roo               | `ROO_API_KEY`               |
 | anthropic         | `ANTHROPIC_API_KEY`         |
 | openai            | `OPENAI_API_KEY`            |
 | openai-native     | `OPENAI_API_KEY`            |
@@ -275,12 +243,6 @@ For protocol-aware local/private base URLs, the CLI also reads:
 | --------- | -------------------- |
 | anthropic | `ANTHROPIC_BASE_URL` |
 | openai    | `OPENAI_BASE_URL`    |
-
-**Compatibility Authentication Environment Variables:**
-
-| Variable          | Description                                                                   |
-| ----------------- | ----------------------------------------------------------------------------- |
-| `ROO_WEB_APP_URL` | Override the Roo Cloud compatibility URL (default: `https://app.roocode.com`) |
 
 ## Architecture
 
@@ -306,14 +268,18 @@ The target architecture is a CLI-native runtime. The current state is transition
 
 1. `index.ts` parses CLI flags and routes into command handlers or the interactive TUI.
 2. CLI-native paths handle command discovery, mode discovery, model discovery, settings, and session history directly.
-3. The interactive execution core is still in transition; some paths reuse upstream runtime compatibility layers until the fork finishes pulling them into CLI-owned modules.
-4. The roadmap goal is to remove the VS Code-shaped runtime boundary entirely from normal CLI operation.
+3. The interactive execution core is still in transition; the current backend activates the extension bundle and drives the returned API surface directly instead of using the fake webview transport.
+4. Workspace file search and autocomplete are already carved out into CLI-owned modules, so the bundle backend is no longer responsible for `@` file lookup behavior.
+5. The roadmap goal is still to replace that bundle-backed execution path with a fully CLI-native engine.
 
 ## Development
 
 ```bash
 # Run directly from source (no build required)
-pnpm dev --protocol openai --base-url http://127.0.0.1:8080/v1 --model qwen3-coder --print "Hello"
+pnpm dev --base-url http://127.0.0.1:8080/v1 --model qwen3-coder --print "Hello"
+
+# Or use the default local contract through env vars
+OPENAI_BASE_URL=http://127.0.0.1:8080/v1 pnpm dev --model qwen3-coder "Hello"
 
 # Run tests
 pnpm test
@@ -323,12 +289,6 @@ pnpm check-types
 
 # Linting
 pnpm lint
-```
-
-By default the `start` script points `ROO_CODE_PROVIDER_URL` at `http://localhost:8080/proxy` for local development. To point at the production API instead, override the environment variable:
-
-```bash
-ROO_CODE_PROVIDER_URL=https://api.roocode.com/proxy pnpm dev --provider roo --api-key $ROO_API_KEY --print "Hello"
 ```
 
 ## Releasing

@@ -1,6 +1,5 @@
 import { useCallback } from "react"
 import { randomUUID } from "crypto"
-import type { WebviewMessage } from "@roo-code/types"
 
 import { getGlobalCommand } from "../../lib/utils/commands.js"
 
@@ -8,7 +7,11 @@ import { useCLIStore } from "../store.js"
 import { useUIStateStore } from "../stores/uiStateStore.js"
 
 export interface UseTaskSubmitOptions {
-	sendRuntimeMessage: ((msg: WebviewMessage) => void) | null
+	sendTaskMessage: ((text: string, images?: string[]) => void) | null
+	clearTask: (() => void) | null
+	refreshCliMetadata: (() => void) | null
+	approve: (() => void) | null
+	reject: (() => void) | null
 	runTask: ((prompt: string) => Promise<void>) | null
 	seenMessageIds: React.MutableRefObject<Set<string>>
 	firstTextMessageSkipped: React.MutableRefObject<boolean>
@@ -31,7 +34,11 @@ export interface UseTaskSubmitReturn {
  * - Handle Y/N approval responses
  */
 export function useTaskSubmit({
-	sendRuntimeMessage,
+	sendTaskMessage,
+	clearTask,
+	refreshCliMetadata,
+	approve,
+	reject,
 	runTask,
 	seenMessageIds,
 	firstTextMessageSkipped,
@@ -55,7 +62,7 @@ export function useTaskSubmit({
 	 */
 	const handleSubmit = useCallback(
 		async (text: string) => {
-			if (!sendRuntimeMessage || !text.trim()) {
+			if (!text.trim()) {
 				return
 			}
 
@@ -73,30 +80,29 @@ export function useTaskSubmit({
 					const globalCommand = getGlobalCommand(commandMatch[1])
 
 					if (globalCommand?.action === "clearTask") {
-						// Reset CLI state and send clearTask to extension.
+						// Reset CLI state and ask the runtime for a fresh task view.
 						useCLIStore.getState().reset()
 
 						// Reset component-level refs to avoid stale message tracking.
 						seenMessageIds.current.clear()
 						firstTextMessageSkipped.current = false
-						sendRuntimeMessage({ type: "clearTask" })
+						clearTask?.()
 
 						// Re-request state, commands and modes since reset() cleared them.
-						sendRuntimeMessage({ type: "requestCommands" })
-						sendRuntimeMessage({ type: "requestModes" })
+						refreshCliMetadata?.()
 						return
 					}
 				}
 			}
 
 			if (pendingAsk) {
+				if (!sendTaskMessage) {
+					return
+				}
+
 				addMessage({ id: randomUUID(), role: "user", content: trimmedText })
 
-				sendRuntimeMessage({
-					type: "askResponse",
-					askResponse: "messageResponse",
-					text: trimmedText,
-				})
+				sendTaskMessage(trimmedText)
 
 				setPendingAsk(null)
 				setShowCustomInput(false)
@@ -116,6 +122,10 @@ export function useTaskSubmit({
 					setLoading(false)
 				}
 			} else {
+				if (!sendTaskMessage) {
+					return
+				}
+
 				if (isComplete) {
 					setComplete(false)
 				}
@@ -123,15 +133,13 @@ export function useTaskSubmit({
 				setLoading(true)
 				addMessage({ id: randomUUID(), role: "user", content: trimmedText })
 
-				sendRuntimeMessage({
-					type: "askResponse",
-					askResponse: "messageResponse",
-					text: trimmedText,
-				})
+				sendTaskMessage(trimmedText)
 			}
 		},
 		[
-			sendRuntimeMessage,
+			sendTaskMessage,
+			clearTask,
+			refreshCliMetadata,
 			runTask,
 			pendingAsk,
 			hasStartedTask,
@@ -153,27 +161,27 @@ export function useTaskSubmit({
 	 * Handle approval (Y key)
 	 */
 	const handleApprove = useCallback(() => {
-		if (!sendRuntimeMessage) {
+		if (!approve) {
 			return
 		}
 
-		sendRuntimeMessage({ type: "askResponse", askResponse: "yesButtonClicked" })
+		approve()
 		setPendingAsk(null)
 		setLoading(true)
-	}, [sendRuntimeMessage, setPendingAsk, setLoading])
+	}, [approve, setPendingAsk, setLoading])
 
 	/**
 	 * Handle rejection (N key)
 	 */
 	const handleReject = useCallback(() => {
-		if (!sendRuntimeMessage) {
+		if (!reject) {
 			return
 		}
 
-		sendRuntimeMessage({ type: "askResponse", askResponse: "noButtonClicked" })
+		reject()
 		setPendingAsk(null)
 		setLoading(true)
-	}, [sendRuntimeMessage, setPendingAsk, setLoading])
+	}, [reject, setPendingAsk, setLoading])
 
 	return {
 		handleSubmit,

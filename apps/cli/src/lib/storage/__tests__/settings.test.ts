@@ -19,7 +19,6 @@ vi.mock("../config-dir.js", () => ({
 
 // Import after mocking
 import { loadSettings, saveSettings, resetOnboarding, getSettingsPath } from "../settings.js"
-import { OnboardingProviderChoice } from "@/types/index.js"
 
 // Re-derive the test config dir for use in tests (must match the hoisted one)
 const actualTestConfigDir = getTestConfigDir()
@@ -51,7 +50,8 @@ describe("Settings Storage", () => {
 
 		it("should load saved settings", async () => {
 			const settingsData = {
-				onboardingProviderChoice: OnboardingProviderChoice.Roo,
+				onboardingProviderChoice: "roo",
+				hasCompletedOnboarding: true,
 				mode: "architect",
 				provider: "anthropic" as const,
 				model: "claude-sonnet-4-20250514",
@@ -170,18 +170,20 @@ describe("Settings Storage", () => {
 	})
 
 	describe("resetOnboarding", () => {
-		it("should reset onboarding provider choice", async () => {
-			await saveSettings({ onboardingProviderChoice: OnboardingProviderChoice.Roo })
+		it("should reset onboarding state", async () => {
+			await saveSettings({ onboardingProviderChoice: "roo", hasCompletedOnboarding: true })
 
 			await resetOnboarding()
 
 			const settings = await loadSettings()
 			expect(settings.onboardingProviderChoice).toBeUndefined()
+			expect(settings.hasCompletedOnboarding).toBeUndefined()
 		})
 
 		it("should preserve other settings when resetting onboarding", async () => {
 			await saveSettings({
-				onboardingProviderChoice: OnboardingProviderChoice.Byok,
+				onboardingProviderChoice: "byok",
+				hasCompletedOnboarding: true,
 				mode: "architect",
 				provider: "gemini" as const,
 			})
@@ -190,6 +192,7 @@ describe("Settings Storage", () => {
 
 			const settings = await loadSettings()
 			expect(settings.onboardingProviderChoice).toBeUndefined()
+			expect(settings.hasCompletedOnboarding).toBeUndefined()
 			expect(settings.mode).toBe("architect")
 			expect(settings.provider).toBe("gemini")
 		})

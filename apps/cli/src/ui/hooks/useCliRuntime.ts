@@ -2,7 +2,7 @@ import { useEffect, useRef, useCallback, useMemo } from "react"
 import { useApp } from "ink"
 import { randomUUID } from "crypto"
 import pWaitFor from "p-wait-for"
-import type { ExtensionMessage, HistoryItem, WebviewMessage } from "@roo-code/types"
+import type { ExtensionMessage, HistoryItem } from "@roo-code/types"
 
 import type { CliRuntime, CliRuntimeOptions, CreateCliRuntime } from "@/runtime/index.js"
 import { arePathsEqual } from "@/lib/utils/path.js"
@@ -47,8 +47,16 @@ export interface UseCliRuntimeOptions extends CliRuntimeOptions {
 
 export interface UseCliRuntimeReturn {
 	isReady: boolean
-	sendRuntimeMessage: ((msg: WebviewMessage) => void) | null
 	runTask: ((prompt: string) => Promise<void>) | null
+	refreshCliMetadata: (() => void) | null
+	selectTask: ((taskId: string) => void) | null
+	setMode: ((modeSlug: string) => void) | null
+	searchFiles: ((query: string) => void) | null
+	clearTask: (() => void) | null
+	cancelTask: (() => void) | null
+	sendTaskMessage: ((text: string, images?: string[]) => void) | null
+	approve: (() => void) | null
+	reject: (() => void) | null
 	cleanup: () => Promise<void>
 }
 
@@ -143,8 +151,7 @@ export function useCliRuntime({
 
 				await runtime.activate()
 
-				runtime.sendMessage({ type: "requestCommands" })
-				runtime.sendMessage({ type: "requestModes" })
+				runtime.refreshCliMetadata()
 
 				if (requestedSessionId || continueSession) {
 					await pWaitFor(() => hasReceivedTaskHistory, {
@@ -172,7 +179,7 @@ export function useCliRuntime({
 						setIsResumingTask(true)
 						setHasStartedTask(true)
 						setLoading(true)
-						runtime.sendMessage({ type: "showTaskWithId", text: resolvedSessionId })
+						runtime.selectTask(resolvedSessionId)
 						return
 					}
 				}
@@ -200,10 +207,6 @@ export function useCliRuntime({
 		}
 	}, []) // Run once on mount
 
-	const sendRuntimeMessage = useCallback((msg: WebviewMessage) => {
-		runtimeRef.current?.sendMessage(msg)
-	}, [])
-
 	const runTask = useCallback((prompt: string): Promise<void> => {
 		if (!runtimeRef.current) {
 			return Promise.reject(new Error("CLI runtime not ready"))
@@ -214,8 +217,69 @@ export function useCliRuntime({
 		return runtimeRef.current.runTask(prompt, taskId)
 	}, [])
 
+	const refreshCliMetadata = useCallback(() => {
+		runtimeRef.current?.refreshCliMetadata()
+	}, [])
+
+	const selectTask = useCallback((taskId: string) => {
+		runtimeRef.current?.selectTask(taskId)
+	}, [])
+
+	const setMode = useCallback((modeSlug: string) => {
+		runtimeRef.current?.setMode(modeSlug)
+	}, [])
+
+	const searchFiles = useCallback((query: string) => {
+		runtimeRef.current?.searchFiles(query)
+	}, [])
+
+	const clearTask = useCallback(() => {
+		runtimeRef.current?.clearTask()
+	}, [])
+
+	const cancelTask = useCallback(() => {
+		runtimeRef.current?.cancelTask()
+	}, [])
+
+	const sendTaskMessage = useCallback((text: string, images?: string[]) => {
+		runtimeRef.current?.sendTaskMessage(text, images)
+	}, [])
+
+	const approve = useCallback(() => {
+		runtimeRef.current?.approve()
+	}, [])
+
+	const reject = useCallback(() => {
+		runtimeRef.current?.reject()
+	}, [])
+
 	return useMemo(
-		() => ({ isReady: isReadyRef.current, sendRuntimeMessage, runTask, cleanup }),
-		[sendRuntimeMessage, runTask, cleanup],
+		() => ({
+			isReady: isReadyRef.current,
+			runTask,
+			refreshCliMetadata,
+			selectTask,
+			setMode,
+			searchFiles,
+			clearTask,
+			cancelTask,
+			sendTaskMessage,
+			approve,
+			reject,
+			cleanup,
+		}),
+		[
+			runTask,
+			refreshCliMetadata,
+			selectTask,
+			setMode,
+			searchFiles,
+			clearTask,
+			cancelTask,
+			sendTaskMessage,
+			approve,
+			reject,
+			cleanup,
+		],
 	)
 }

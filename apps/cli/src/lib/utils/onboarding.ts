@@ -1,38 +1,12 @@
-import { createElement } from "react"
-
-import { type OnboardingResult, OnboardingProviderChoice } from "@/types/index.js"
-import { login } from "@/commands/index.js"
 import { saveSettings } from "@/lib/storage/index.js"
 
-export async function runOnboarding(): Promise<OnboardingResult> {
-	const { render } = await import("ink")
-	const { OnboardingScreen } = await import("../../ui/components/onboarding/index.js")
+export async function runOnboarding(): Promise<void> {
+	await saveSettings({ hasCompletedOnboarding: true })
 
-	return new Promise<OnboardingResult>((resolve) => {
-		const onSelect = async (choice: OnboardingProviderChoice) => {
-			await saveSettings({ onboardingProviderChoice: choice })
-
-			app.unmount()
-
-			console.log("")
-
-			if (choice === OnboardingProviderChoice.Roo) {
-				const result = await login()
-				await saveSettings({ onboardingProviderChoice: choice })
-
-				resolve({
-					choice: OnboardingProviderChoice.Roo,
-					token: result.success ? result.token : undefined,
-					skipped: false,
-				})
-			} else {
-				console.log("Using local/self-hosted provider mode.")
-				console.log("Set --runtime/--protocol/--base-url and --model, or configure provider env vars.")
-				console.log("")
-				resolve({ choice: OnboardingProviderChoice.Byok, skipped: false })
-			}
-		}
-
-		const app = render(createElement(OnboardingScreen, { onSelect }))
-	})
+	console.log("")
+	console.log("[CLI] Local/private mode is the default contract for this fork.")
+	console.log("[CLI] Set OPENAI_BASE_URL or use --base-url, then provide --model.")
+	console.log("[CLI] Optional local profiles: --runtime llama.cpp|vllm-mlx --protocol openai|anthropic")
+	console.log("[CLI] Remote providers remain explicit opt-in via --provider.")
+	console.log("")
 }

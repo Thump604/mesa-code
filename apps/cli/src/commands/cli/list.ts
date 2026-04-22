@@ -8,7 +8,7 @@ import { getCliCommands } from "@/lib/discovery/commands.js"
 import { getAnthropicCompatibleModels, getOpenAiCompatibleModels, getRouterModels } from "@/lib/discovery/models.js"
 import { loadCliModes } from "@/lib/discovery/modes.js"
 import { readWorkspaceTaskSessions } from "@/lib/task-history/index.js"
-import { loadSettings, loadToken } from "@/lib/storage/index.js"
+import { loadSettings } from "@/lib/storage/index.js"
 import { getApiKeyFromEnv } from "@/lib/utils/provider.js"
 import {
 	resolveConfiguredApiKey,
@@ -139,16 +139,13 @@ async function resolveModelOptions(options: BaseListOptions) {
 	validateProtocolAndRuntime(options)
 
 	const settings = await loadSettings()
-	const rooToken = await loadToken()
 	const protocol = resolveEffectiveProtocol(options.protocol, options.provider, settings)
 	const runtime = resolveEffectiveRuntime(options.runtime, settings)
-	const provider = resolveEffectiveProvider(options.provider, settings, Boolean(rooToken), protocol, runtime)
+	const provider = resolveEffectiveProvider(options.provider, settings, protocol, runtime)
 	const baseUrl = resolveConfiguredBaseUrl(options.baseUrl, settings, protocol)
 	const model =
 		resolveEffectiveModel(undefined, settings, provider, baseUrl, runtime) || getProviderDefaultModelId(provider)
-	const apiKey =
-		(provider === "roo" ? rooToken : undefined) ||
-		resolveConfiguredApiKey(provider, options.apiKey, settings, getApiKeyFromEnv(provider), baseUrl)
+	const apiKey = resolveConfiguredApiKey(provider, options.apiKey, settings, getApiKeyFromEnv(provider), baseUrl)
 
 	return { provider, protocol, runtime, baseUrl, model, apiKey }
 }
@@ -197,7 +194,7 @@ export async function listModels(options: BaseListOptions): Promise<void> {
 		}
 
 		models = await getAnthropicCompatibleModels(baseUrl ?? "https://api.anthropic.com", apiKey)
-	} else if (provider === "openrouter" || provider === "vercel-ai-gateway" || provider === "roo") {
+	} else if (provider === "openrouter" || provider === "vercel-ai-gateway") {
 		models = await getRouterModels(provider, {
 			...(apiKey ? { apiKey } : {}),
 			...(baseUrl ? { baseUrl } : {}),

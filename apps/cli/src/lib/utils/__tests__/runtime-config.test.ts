@@ -50,7 +50,6 @@ describe("runtime-config", () => {
 				resolveEffectiveProvider(
 					"anthropic",
 					{ provider: "openai", openAiBaseUrl: "http://localhost:8080/v1" },
-					true,
 					"openai",
 					undefined,
 				),
@@ -59,25 +58,23 @@ describe("runtime-config", () => {
 
 		it("prefers configured local openai-compatible settings when no provider is set", () => {
 			expect(
-				resolveEffectiveProvider(
-					undefined,
-					{ openAiBaseUrl: "http://localhost:8080/v1" },
-					true,
-					"openai",
-					undefined,
-				),
+				resolveEffectiveProvider(undefined, { openAiBaseUrl: "http://localhost:8080/v1" }, "openai", undefined),
 			).toBe("openai")
 		})
 
 		it("uses the selected anthropic-compatible protocol for local runtimes", () => {
-			expect(resolveEffectiveProvider(undefined, { runtime: "vllm-mlx" }, true, "anthropic", "vllm-mlx")).toBe(
+			expect(resolveEffectiveProvider(undefined, { runtime: "vllm-mlx" }, "anthropic", "vllm-mlx")).toBe(
 				"anthropic",
 			)
 		})
 
-		it("falls back to roo only when no local/private config is present", () => {
-			expect(resolveEffectiveProvider(undefined, {}, true, "openai", undefined)).toBe("roo")
-			expect(resolveEffectiveProvider(undefined, {}, false, "openai", undefined)).toBe("openrouter")
+		it("ignores legacy roo provider settings and defaults to the local openai contract", () => {
+			expect(resolveEffectiveProvider(undefined, { provider: "roo" }, "openai", undefined)).toBe("openai")
+		})
+
+		it("defaults to the local protocol when no explicit provider is set", () => {
+			expect(resolveEffectiveProvider(undefined, {}, "openai", undefined)).toBe("openai")
+			expect(resolveEffectiveProvider(undefined, {}, "anthropic", undefined)).toBe("anthropic")
 		})
 	})
 

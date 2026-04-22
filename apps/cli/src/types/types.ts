@@ -8,7 +8,6 @@ export const supportedProviders = [
 	"gemini",
 	"openrouter",
 	"vercel-ai-gateway",
-	"roo",
 ] as const satisfies ProviderName[]
 
 export type SupportedProvider = (typeof supportedProviders)[number]
@@ -63,23 +62,17 @@ export type FlagOptions = {
 	outputFormat?: OutputFormat
 }
 
-export enum OnboardingProviderChoice {
-	Roo = "roo",
-	Byok = "byok",
-}
-
-export interface OnboardingResult {
-	choice: OnboardingProviderChoice
-	token?: string
-	skipped: boolean
-}
+export type LegacyOnboardingProviderChoice = "roo" | "byok"
 
 export interface CliSettings {
-	onboardingProviderChoice?: OnboardingProviderChoice
+	/** @deprecated Legacy onboarding choice preserved only for migration bookkeeping. */
+	onboardingProviderChoice?: LegacyOnboardingProviderChoice
+	/** True once the local/private-first onboarding guidance has been shown. */
+	hasCompletedOnboarding?: boolean
 	/** Default mode to use (e.g., "code", "architect", "ask", "debug") */
 	mode?: string
-	/** Default provider to use */
-	provider?: SupportedProvider
+	/** Default provider to use. Legacy Roo cloud provider values are ignored during resolution. */
+	provider?: SupportedProvider | "roo"
 	/** Default model to use */
 	model?: string
 	/** Default reasoning effort level */

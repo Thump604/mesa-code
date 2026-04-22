@@ -173,7 +173,19 @@ function AppInner({ createCliRuntime, ...runtimeOptions }: TUIAppProps) {
 		nonInteractive,
 	})
 
-	const { sendRuntimeMessage, runTask, cleanup } = useCliRuntime({
+	const {
+		sendTaskMessage,
+		refreshCliMetadata,
+		selectTask,
+		setMode,
+		searchFiles,
+		clearTask,
+		cancelTask,
+		approve,
+		reject,
+		runTask,
+		cleanup,
+	} = useCliRuntime({
 		initialPrompt,
 		initialTaskId,
 		initialSessionId,
@@ -196,7 +208,11 @@ function AppInner({ createCliRuntime, ...runtimeOptions }: TUIAppProps) {
 
 	// Initialize task submit hook
 	const { handleSubmit, handleApprove, handleReject } = useTaskSubmit({
-		sendRuntimeMessage,
+		sendTaskMessage,
+		clearTask,
+		refreshCliMetadata,
+		approve,
+		reject,
 		runTask,
 		seenMessageIds,
 		firstTextMessageSkipped,
@@ -219,7 +235,8 @@ function AppInner({ createCliRuntime, ...runtimeOptions }: TUIAppProps) {
 		usePickerHandlers({
 			autocompleteRef,
 			followupAutocompleteRef,
-			sendRuntimeMessage,
+			setMode,
+			selectTask,
 			showInfo,
 			seenMessageIds,
 			firstTextMessageSkipped,
@@ -233,7 +250,8 @@ function AppInner({ createCliRuntime, ...runtimeOptions }: TUIAppProps) {
 		availableModes,
 		currentMode,
 		mode,
-		sendRuntimeMessage,
+		setMode,
+		cancelTask,
 		showInfo,
 		exit,
 		cleanup,
@@ -291,12 +309,12 @@ function AppInner({ createCliRuntime, ...runtimeOptions }: TUIAppProps) {
 	// File search handler for the file trigger
 	const handleFileSearch = useCallback(
 		(query: string) => {
-			if (!sendRuntimeMessage) {
+			if (!searchFiles) {
 				return
 			}
-			sendRuntimeMessage({ type: "searchFiles", query })
+			searchFiles(query)
 		},
-		[sendRuntimeMessage],
+		[searchFiles],
 	)
 
 	// Create autocomplete triggers
@@ -316,11 +334,11 @@ function AppInner({ createCliRuntime, ...runtimeOptions }: TUIAppProps) {
 
 		const slashCommandTrigger = createSlashCommandTrigger({
 			getCommands: () => {
-				// Merge CLI global commands with extension commands
-				const extensionCommands = allSlashCommandsRef.current.map(toSlashCommandResult)
+				// Merge CLI global commands with runtime-provided commands.
+				const runtimeCommands = allSlashCommandsRef.current.map(toSlashCommandResult)
 				const globalCommands = getGlobalCommandsForAutocomplete().map(toSlashCommandResult)
-				// Global commands appear first, then extension commands
-				return [...globalCommands, ...extensionCommands]
+				// Global commands appear first, then runtime commands.
+				return [...globalCommands, ...runtimeCommands]
 			},
 		})
 

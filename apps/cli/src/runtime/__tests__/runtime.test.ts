@@ -1,136 +1,201 @@
+import { EventEmitter } from "events"
+
 import { describe, expect, it, vi } from "vitest"
 
-import { AgentLoopState, type AgentStateInfo } from "@/agent/agent-state.js"
-import type { ExtensionHost } from "@/agent/extension-host.js"
+import type { ClineMessage } from "@roo-code/types"
+
 import type { JsonEventEmitter } from "@/agent/json-event-emitter.js"
 
-import { ExtensionBackedCliRuntime } from "../runtime.js"
+import { BundleApiCliRuntime } from "../bundle-runtime.js"
 
-const AGENT_STATE: AgentStateInfo = {
-	state: AgentLoopState.WAITING_FOR_INPUT,
-	isWaitingForInput: true,
-	isRunning: false,
-	isStreaming: false,
-	currentAsk: "followup",
-	requiredAction: "answer",
-	description: "waiting for input",
-}
+function createRuntimeHarness() {
+	const approveAsk = vi.fn()
+	const denyAsk = vi.fn()
+	const submitUserMessage = vi.fn().mockResolvedValue(undefined)
+	const addQueuedMessage = vi.fn()
+	const startNewTask = vi.fn().mockResolvedValue("task-1")
+	const resumeTask = vi.fn().mockResolvedValue(undefined)
+	const clearCurrentTask = vi.fn().mockResolvedValue(undefined)
+	const cancelCurrentTask = vi.fn().mockResolvedValue(undefined)
+	const setConfiguration = vi.fn().mockResolvedValue(undefined)
+	const searchWorkspaceFiles = vi
+		.fn()
+		.mockResolvedValue([{ path: "src/index.ts", type: "file" as const, label: "index.ts" }])
 
-function createHostStub() {
-	const offTaskCompleted = vi.fn()
-	const offError = vi.fn()
-
-	const host = {
-		activate: vi.fn().mockResolvedValue(undefined),
-		runTask: vi.fn().mockResolvedValue(undefined),
-		resumeTask: vi.fn().mockResolvedValue(undefined),
-		sendToExtension: vi.fn(),
-		on: vi.fn(),
-		off: vi.fn(),
-		getRuntimeOptions: vi.fn().mockReturnValue({
-			provider: "openai",
-			apiKey: "test-key",
-			baseUrl: "http://127.0.0.1:8080/v1",
-		}),
-		getAgentState: vi.fn().mockReturnValue(AGENT_STATE),
-		isWaitingForInput: vi.fn().mockReturnValue(true),
-		dispose: vi.fn().mockResolvedValue(undefined),
-		client: {
-			on: vi.fn((event: string) => {
-				if (event === "taskCompleted") {
-					return offTaskCompleted
-				}
-
-				if (event === "error") {
-					return offError
-				}
-
-				return vi.fn()
-			}),
-			hasActiveTask: vi.fn().mockReturnValue(true),
-			getCurrentAsk: vi.fn().mockReturnValue("followup"),
-			cancelTask: vi.fn(),
+	const currentTask = {
+		taskId: "task-1",
+		clineMessages: [] as ClineMessage[],
+		apiConfiguration: { apiProvider: "openai", openAiModelId: "qwen3-coder" },
+		approveAsk,
+		denyAsk,
+		submitUserMessage,
+		messageQueueService: {
+			addMessage: addQueuedMessage,
 		},
 	}
 
+	const api = new EventEmitter() as EventEmitter & {
+		startNewTask: typeof startNewTask
+		resumeTask: typeof resumeTask
+		clearCurrentTask: typeof clearCurrentTask
+		cancelCurrentTask: typeof cancelCurrentTask
+		sendMessage: (text?: string, images?: string[]) => Promise<void>
+		getConfiguration: () => { mode: string }
+		setConfiguration: typeof setConfiguration
+		getCurrentTaskStack: () => (typeof currentTask)[]
+		isTaskInHistory: (taskId: string) => Promise<boolean>
+	}
+
+	api.startNewTask = startNewTask
+	api.resumeTask = resumeTask
+	api.clearCurrentTask = clearCurrentTask
+	api.cancelCurrentTask = cancelCurrentTask
+	api.sendMessage = vi.fn().mockResolvedValue(undefined)
+	api.getConfiguration = () => ({ mode: "code" })
+	api.setConfiguration = setConfiguration
+	api.getCurrentTaskStack = () => [currentTask]
+	api.isTaskInHistory = vi.fn().mockResolvedValue(true)
+
+	const runtime = new BundleApiCliRuntime(
+		{
+			mode: "code",
+			user: null,
+			provider: "openai",
+			model: "qwen3-coder",
+			baseUrl: "http://127.0.0.1:8080/v1",
+			workspacePath: "/workspace",
+			extensionPath: "/extension",
+			ephemeral: false,
+			debug: false,
+			exitOnComplete: false,
+			disableOutput: true,
+		},
+		{
+			loadBundle: vi.fn().mockResolvedValue({ api }),
+			readTaskSessions: vi.fn().mockResolvedValue([
+				{
+					id: "task-1",
+					task: "hello",
+					ts: 100,
+					workspace: "/workspace",
+				},
+			]),
+			searchWorkspaceFiles,
+		},
+	)
+
 	return {
-		host: host as unknown as ExtensionHost,
-		rawHost: host,
-		offTaskCompleted,
-		offError,
+		runtime,
+		api,
+		currentTask,
+		startNewTask,
+		resumeTask,
+		clearCurrentTask,
+		cancelCurrentTask,
+		setConfiguration,
+		searchWorkspaceFiles,
+		approveAsk,
+		denyAsk,
+		submitUserMessage,
+		addQueuedMessage,
 	}
 }
 
-describe("ExtensionBackedCliRuntime", () => {
-	it("delegates runtime message and task controls to the extension-backed host", async () => {
-		const { host, rawHost } = createHostStub()
-		const runtime = new ExtensionBackedCliRuntime(host)
+describe("BundleApiCliRuntime", () => {
+	it("routes task controls through the activated bundle API", async () => {
+		const {
+			runtime,
+			resumeTask,
+			clearCurrentTask,
+			cancelCurrentTask,
+			setConfiguration,
+			searchWorkspaceFiles,
+			approveAsk,
+			denyAsk,
+			submitUserMessage,
+			addQueuedMessage,
+		} = createRuntimeHarness()
+
+		const messages: unknown[] = []
+		runtime.onMessage((message) => messages.push(message))
 
 		await runtime.activate()
-		await runtime.runTask("hello", "task-1")
-		await runtime.resumeTask("task-1")
-		runtime.sendMessage({ type: "requestModes" })
+
+		runtime.selectTask("task-1")
+		await Promise.resolve()
+		expect(resumeTask).toHaveBeenCalledWith("task-1")
+
+		runtime.sendTaskMessage("continue", ["image.png"])
+		expect(submitUserMessage).toHaveBeenCalledWith("continue", ["image.png"])
+
+		runtime.queueMessage("queued", ["queued.png"])
+		expect(addQueuedMessage).toHaveBeenCalledWith("queued", ["queued.png"])
+
+		runtime.approve()
+		runtime.reject()
+		expect(approveAsk).toHaveBeenCalledOnce()
+		expect(denyAsk).toHaveBeenCalledOnce()
+
+		runtime.setMode("architect")
+		await Promise.resolve()
+		expect(setConfiguration).toHaveBeenCalledWith({ mode: "architect" })
+
+		runtime.searchFiles("index")
+		await Promise.resolve()
+		expect(searchWorkspaceFiles).toHaveBeenCalledWith({
+			workspacePath: "/workspace",
+			query: "index",
+		})
+
+		runtime.clearTask()
+		await Promise.resolve()
+		expect(clearCurrentTask).toHaveBeenCalledOnce()
+
 		runtime.cancelTask()
+		await Promise.resolve()
+		expect(cancelCurrentTask).toHaveBeenCalledOnce()
 
-		expect(rawHost.activate).toHaveBeenCalledOnce()
-		expect(rawHost.runTask).toHaveBeenCalledWith("hello", "task-1", undefined, undefined)
-		expect(rawHost.resumeTask).toHaveBeenCalledWith("task-1")
-		expect(rawHost.sendToExtension).toHaveBeenCalledWith({ type: "requestModes" })
-		expect(rawHost.client.cancelTask).toHaveBeenCalledOnce()
+		expect(messages.some((message) => (message as { type?: string }).type === "state")).toBe(true)
+		expect(
+			messages.some(
+				(message) =>
+					(message as { type?: string; results?: Array<{ path: string }> }).type === "fileSearchResults" &&
+					(message as { results?: Array<{ path: string }> }).results?.[0]?.path === "src/index.ts",
+			),
+		).toBe(true)
+
+		await runtime.dispose()
 	})
 
-	it("wraps extension-host events behind runtime subscriptions", () => {
-		const { host, rawHost, offTaskCompleted, offError } = createHostStub()
-		const runtime = new ExtensionBackedCliRuntime(host)
-		const onMessage = vi.fn()
-		const onTaskCompleted = vi.fn()
-		const onError = vi.fn()
-
-		const unsubscribeMessage = runtime.onMessage(onMessage)
-		const unsubscribeTaskCompleted = runtime.onTaskCompleted(onTaskCompleted)
-		const unsubscribeError = runtime.onError(onError)
-
-		expect(rawHost.on).toHaveBeenCalledWith("extensionWebviewMessage", expect.any(Function))
-		expect(rawHost.client.on).toHaveBeenCalledWith("taskCompleted", onTaskCompleted)
-		expect(rawHost.client.on).toHaveBeenCalledWith("error", onError)
-
-		const messageHandler = rawHost.on.mock.calls[0]?.[1] as ((message: unknown) => void) | undefined
-		expect(messageHandler).toBeTypeOf("function")
-
-		messageHandler?.({ type: "state" })
-		expect(onMessage).toHaveBeenCalledWith({ type: "state" })
-
-		unsubscribeMessage()
-		unsubscribeTaskCompleted()
-		unsubscribeError()
-
-		expect(rawHost.off).toHaveBeenCalledWith("extensionWebviewMessage", messageHandler)
-		expect(offTaskCompleted).toHaveBeenCalledOnce()
-		expect(offError).toHaveBeenCalledOnce()
-	})
-
-	it("exposes runtime state helpers and json-emitter attachment", async () => {
-		const { host, rawHost } = createHostStub()
-		const runtime = new ExtensionBackedCliRuntime(host)
+	it("exposes runtime state helpers and json emitter attachment", async () => {
+		const { runtime, api } = createRuntimeHarness()
 		const attachToClient = vi.fn()
 		const emitter = {
 			attachToClient,
 		} as unknown as JsonEventEmitter
 
+		await runtime.activate()
 		runtime.attachJsonEmitter(emitter)
 
 		expect(runtime.getRuntimeOptions()).toEqual({
 			provider: "openai",
-			apiKey: "test-key",
+			apiKey: undefined,
 			baseUrl: "http://127.0.0.1:8080/v1",
 		})
-		expect(runtime.getAgentState()).toEqual(AGENT_STATE)
+
+		const followupMessage = {
+			ts: 2,
+			type: "ask",
+			ask: "followup",
+			text: "Need input",
+		} as const
+		api.emit("message", { taskId: "task-1", action: "created", message: followupMessage })
+
 		expect(runtime.isWaitingForInput()).toBe(true)
 		expect(runtime.hasActiveTask()).toBe(true)
 		expect(runtime.getCurrentAsk()).toBe("followup")
-		expect(attachToClient).toHaveBeenCalledWith(rawHost.client)
+		expect(attachToClient).toHaveBeenCalledOnce()
 
 		await runtime.dispose()
-		expect(rawHost.dispose).toHaveBeenCalledOnce()
 	})
 })
