@@ -186,6 +186,7 @@ Goal: make local model use better than cloud-native competitors.
 - add a runtime/model manager contract with adapters for model install, startup, health, metrics, and model swap
 - add a model-source layer for Hugging Face and local disk, with resume/checksum-friendly downloads
 - add a placement policy so large resident models land on the right disk automatically instead of removable or slow storage
+- keep dry-run planning honest: show source and storage policy before execution, and fail closed when placement support is not actually live
 - model capability registry with context, reasoning, tool, and vision metadata
 - local presets tuned for common runtimes
 - clear timeout and retry behavior for slow local inference

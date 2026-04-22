@@ -15,6 +15,7 @@ import {
 import type { SupportedApiStandard, SupportedLocalRuntime, SupportedProvider } from "@/types/index.js"
 
 import { collectRuntimeDoctorReport, type RuntimeDoctorReport } from "./observability.js"
+import type { ModelUsePlan } from "./model-plan.js"
 
 export type RuntimeUseAction = {
 	kind:
@@ -37,6 +38,7 @@ export type RuntimeUseResult = {
 	baseUrl: string
 	model: string
 	state: "configured" | "starting" | "ready"
+	plan?: ModelUsePlan
 	executable?: string
 	managedProcess?: Pick<ManagedRuntimeProcessState, "pid" | "logPath">
 	doctor?: RuntimeDoctorReport
@@ -50,6 +52,7 @@ export type RuntimeUseRequest = {
 	provider: SupportedProvider
 	baseUrl: string
 	model: string
+	plan?: ModelUsePlan
 	apiKey?: string
 	installRuntime?: boolean
 	startRuntime?: boolean
@@ -342,6 +345,7 @@ export async function activateManagedRuntime(
 			baseUrl: request.baseUrl,
 			model: request.model,
 			state: "configured",
+			plan: request.plan,
 			executable: executable.path,
 			actions,
 			hints,
@@ -392,6 +396,7 @@ export async function activateManagedRuntime(
 				baseUrl: request.baseUrl,
 				model: request.model,
 				state,
+				plan: request.plan,
 				executable: executable.path,
 				managedProcess: {
 					pid: existingManagedProcess.pid,
@@ -469,6 +474,7 @@ export async function activateManagedRuntime(
 		baseUrl: request.baseUrl,
 		model: request.model,
 		state,
+		plan: request.plan,
 		executable: executable.path,
 		managedProcess: {
 			pid: spawned.pid,

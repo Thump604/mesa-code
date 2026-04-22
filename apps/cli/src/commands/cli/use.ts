@@ -19,6 +19,7 @@ import {
 	type SupportedProvider,
 } from "@/types/index.js"
 import { activateManagedRuntime, type RuntimeUseResult } from "@/runtime/runtime-manager.js"
+import { buildModelUsePlan, type ModelUsePlan } from "@/runtime/model-plan.js"
 
 type UseFormat = "json" | "text"
 
@@ -30,8 +31,11 @@ export type UseOptions = {
 	baseUrl?: string
 	model?: string
 	format?: string
+	plan?: boolean
 	installRuntime?: boolean
 	start?: boolean
+	storageRoot?: string
+	allowExternalStorage?: boolean
 	waitSeconds?: string | number
 }
 
@@ -77,6 +81,10 @@ function outputText(result: RuntimeUseResult): void {
 		process.stdout.write(`Managed PID: ${result.managedProcess.pid}\n`)
 	}
 
+	if (result.plan) {
+		outputTextPlan(result.plan)
+	}
+
 	if (result.actions.length) {
 		process.stdout.write("Actions:\n")
 		for (const action of result.actions) {
@@ -101,6 +109,26 @@ function outputText(result: RuntimeUseResult): void {
 	}
 }
 
+function outputTextPlan(plan: ModelUsePlan): void {
+	process.stdout.write(`Source: ${plan.source.kind}\n`)
+	if (plan.source.resolvedPath) {
+		process.stdout.write(`Source Path: ${plan.source.resolvedPath}\n`)
+	}
+	process.stdout.write(`Download Required: ${plan.download.required ? "yes" : "no"}\n`)
+	process.stdout.write(`Placement: ${plan.placement.status}\n`)
+	process.stdout.write(`Placement Enforcement: ${plan.placement.enforcement}\n`)
+	if (plan.placement.effectiveStorageRoot) {
+		process.stdout.write(`Storage Root: ${plan.placement.effectiveStorageRoot}\n`)
+	}
+	if (plan.placement.targetPathHint) {
+		process.stdout.write(`Target Path Hint: ${plan.placement.targetPathHint}\n`)
+	}
+	if (plan.placement.freeBytes !== undefined) {
+		process.stdout.write(`Free Space (bytes): ${plan.placement.freeBytes}\n`)
+	}
+	process.stdout.write(`Likely External Storage: ${plan.placement.likelyExternal ? "yes" : "no"}\n`)
+}
+
 function validateUseOptions(options: UseOptions): void {
 	if (options.protocol && !isSupportedApiStandard(options.protocol)) {
 		throw new Error(`Invalid protocol: ${options.protocol}; must be one of: ${supportedApiStandards.join(", ")}`)
@@ -115,6 +143,7 @@ export async function useRuntime(
 	options: UseOptions,
 	deps: {
 		activateManagedRuntime?: typeof activateManagedRuntime
+		buildModelUsePlan?: typeof buildModelUsePlan
 		saveSettings?: typeof saveSettings
 	} = {},
 ): Promise<void> {
@@ -139,13 +168,64 @@ export async function useRuntime(
 		throw new Error("Use requires --model or a saved model for the selected local runtime.")
 	}
 
+	if (options.storageRoot && !options.plan) {
+		throw new Error(
+			"--storage-root is currently planning-only. Use `roo use --plan ... --storage-root <path>` until runtime-native placement support lands.",
+		)
+	}
+
 	const apiKey = resolveConfiguredApiKey(provider, options.apiKey, settings, getApiKeyFromEnv(provider), baseUrl)
+	const plan = await (deps.buildModelUsePlan ?? buildModelUsePlan)({
+		runtime,
+		model,
+		storageRoot: options.storageRoot,
+		allowExternalStorage: options.allowExternalStorage,
+	})
+
+	if (plan.source.kind === "local-path-missing") {
+		throw new Error(`The requested local model path does not exist: ${plan.source.resolvedPath ?? model}`)
+	}
+
+	if (plan.placement.status === "blocked") {
+		throw new Error(
+			"The selected model source or storage root appears to be on external storage. Re-run with --allow-external-storage if that is intentional.",
+		)
+	}
+
+	if (options.plan) {
+		const result: RuntimeUseResult = {
+			runtime,
+			protocol,
+			provider,
+			baseUrl,
+			model,
+			state: "configured",
+			plan,
+			actions: [
+				{
+					kind: "settings-selected",
+					description: `Planned ${runtime} lane for ${model}.`,
+				},
+			],
+			hints: plan.warnings,
+		}
+
+		if (parseUseFormat(options.format) === "json") {
+			outputJson(result)
+			return
+		}
+
+		outputText(result)
+		return
+	}
+
 	const result = await (deps.activateManagedRuntime ?? activateManagedRuntime)({
 		runtime,
 		protocol,
 		provider,
 		baseUrl,
 		model,
+		plan,
 		apiKey,
 		installRuntime: options.installRuntime ?? true,
 		startRuntime: options.start ?? true,

@@ -47,6 +47,7 @@ What is already in motion on the fork branch:
 - protocol-aware `--base-url`
 - managed local runtime selection through `roo use`
 - persisted runtime state and logs under `~/.roo/`
+- dry-run model source and storage planning through `roo use --plan`
 - local loopback placeholder-key behavior for self-hosted endpoints
 
 What is next:
@@ -112,12 +113,22 @@ roo use \
   --base-url http://127.0.0.1:8081 \
   --model /models/coder.gguf \
   --no-start
+
+# Plan remote model acquisition and placement without changing anything.
+roo use \
+  --runtime vllm-mlx \
+  --model Qwen/Qwen3.6-35B-A3B \
+  --plan
 ```
 
 The fork should not invent duplicate model-serving telemetry for those runtimes.
 Observability should come from the engine itself, especially for `llama.cpp`
 and `vllm-mlx`. The CLI’s job is to normalize those signals and make the local
 runtime lane easy to bootstrap and inspect.
+
+Where runtime-native placement support is still missing, the CLI should be
+explicit about it. `roo use --plan` now shows model source and storage policy
+without pretending `--storage-root` is already live-enforced.
 
 ## Development
 

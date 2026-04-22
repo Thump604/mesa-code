@@ -176,6 +176,19 @@ roo use \
   --base-url http://127.0.0.1:8081 \
   --model /models/coder.gguf \
   --no-start
+
+# Dry-run the model source and storage plan for a remote model.
+roo use \
+  --runtime vllm-mlx \
+  --model Qwen/Qwen3.6-35B-A3B \
+  --plan
+
+# Dry-run a specific storage-root policy.
+roo use \
+  --runtime vllm-mlx \
+  --model Qwen/Qwen3.6-35B-A3B \
+  --plan \
+  --storage-root ~/ai-models
 ```
 
 The CLI should not own model-serving telemetry for these runtimes. Use the
@@ -188,6 +201,11 @@ and `/metrics`, then normalizes runtime metrics into a stable
 `gen_ai.local.*` namespace for downstream OpenTelemetry collection or
 dashboards. `roo use` builds on the same contract to verify that the managed
 runtime lane is actually responding before it returns when possible.
+
+`--storage-root` is currently planning-only. The CLI will show the placement
+plan and block obviously external/removable targets unless
+`--allow-external-storage` is set, but live execution still depends on
+runtime-native placement support.
 
 ### Local Runtime Doctor
 
@@ -310,7 +328,8 @@ The target architecture is a CLI-native runtime. The current state is transition
 4. Workspace file search and autocomplete are already carved out into CLI-owned modules, so the bundle backend is no longer responsible for `@` file lookup behavior.
 5. Local runtime doctor/observability is CLI-owned. It probes health and metrics endpoints directly instead of relying on extension-side plumbing.
 6. Local runtime lifecycle is now starting to move into CLI-owned modules through `roo use`, managed process state, and runtime log tracking.
-7. The roadmap goal is still to replace the remaining bundle-backed execution path with a fully CLI-native engine.
+7. Model-source and storage planning is now CLI-owned through `roo use --plan`, with explicit planning-only boundaries where runtime support is still missing.
+8. The roadmap goal is still to replace the remaining bundle-backed execution path with a fully CLI-native engine.
 
 ## Development
 
