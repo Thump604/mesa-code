@@ -25,7 +25,7 @@ import { createCliRuntime, type CliRuntime, type CliRuntimeOptions } from "@/run
 
 import { getOpsModeContract, resolveOpsBaseUrl } from "@/lib/ops-control-plane.js"
 import { loadSettings } from "@/lib/storage/index.js"
-import { readWorkspaceTaskSessions, resolveWorkspaceResumeSessionId } from "@/lib/task-history/index.js"
+import { resolveWorkspaceResumeSessionId } from "@/lib/task-history/index.js"
 import { getEnvVarName, getApiKeyFromEnv } from "@/lib/utils/provider.js"
 import {
 	resolveConfiguredApiKey,
@@ -405,19 +405,6 @@ export async function run(promptArg: string | undefined, flagOptions: FlagOption
 	}
 
 	const useStdinPromptStream = flagOptions.stdinPromptStream
-	let resolvedResumeSessionId: string | undefined
-
-	if (isResumeRequested) {
-		const workspaceSessions = await readWorkspaceTaskSessions(effectiveWorkspacePath)
-		try {
-			resolvedResumeSessionId = resolveWorkspaceResumeSessionId(workspaceSessions, requestedSessionId)
-		} catch (error) {
-			const message = error instanceof Error ? error.message : String(error)
-			console.error(`[CLI] Error: ${message}`)
-			process.exit(1)
-		}
-	}
-
 	if (!isTuiEnabled) {
 		if (!prompt && !useStdinPromptStream && !isResumeRequested) {
 			if (flagOptions.print) {
@@ -452,8 +439,8 @@ export async function run(promptArg: string | undefined, flagOptions: FlagOption
 					...runtimeOptions,
 					initialPrompt: prompt,
 					initialTaskId: requestedCreateSessionId,
-					initialSessionId: resolvedResumeSessionId,
-					continueSession: false,
+					initialSessionId: requestedSessionId,
+					continueSession: shouldContinueSession,
 					version: VERSION,
 					createCliRuntime,
 				}),
@@ -477,6 +464,7 @@ export async function run(promptArg: string | undefined, flagOptions: FlagOption
 
 		const runtime = createCliRuntime(runtimeOptions)
 		let streamRequestId: string | undefined
+		let resolvedResumeSessionId: string | undefined
 		let keepAliveInterval: NodeJS.Timeout | undefined
 		let isShuttingDown = false
 		let runtimeDisposed = false
@@ -643,6 +631,13 @@ export async function run(promptArg: string | undefined, flagOptions: FlagOption
 
 			if (jsonEmitter) {
 				runtime.attachJsonEmitter(jsonEmitter)
+			}
+
+			if (isResumeRequested) {
+				resolvedResumeSessionId = resolveWorkspaceResumeSessionId(
+					await runtime.readTaskHistory(),
+					requestedSessionId,
+				)
 			}
 
 			if (useStdinPromptStream) {

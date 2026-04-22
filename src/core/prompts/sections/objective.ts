@@ -1,4 +1,19 @@
-export function getObjectiveSection(): string {
+import type { SystemPromptSettings } from "../types"
+import { isTerminalPromptProfile } from "../types"
+
+export function getObjectiveSection(settings?: SystemPromptSettings): string {
+	if (isTerminalPromptProfile(settings)) {
+		return `====
+
+OBJECTIVE
+
+1. Understand the user's task and form a practical plan.
+2. Use tools to gather context, make changes, and verify work.
+3. Continue until you hit a real blocker, need approval or user input, or have a finished result.
+4. Ask follow-up questions only when the available context and tools are insufficient to move forward safely.
+5. Use the attempt_completion tool when the task is finished. Do not end with unnecessary questions or offers for more work.`
+	}
+
 	return `====
 
 OBJECTIVE

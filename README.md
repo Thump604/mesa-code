@@ -12,6 +12,7 @@ The direction here is narrower and stricter:
 - no hosted routing assumptions in the happy path
 - telemetry off by default
 - explicit operator control over tools, models, and config
+- lean terminal-native prompt defaults with advanced scaffolding layered on only when needed
 
 The final product name and package namespace are still pending. Until that is
 decided, this repo uses a temporary fork identity and documents the migration
@@ -50,6 +51,7 @@ What is already in motion on the fork branch:
 - persisted runtime state and logs under `~/.roo/`
 - dry-run model source and storage planning through `roo use --plan`
 - local loopback placeholder-key behavior for self-hosted endpoints
+- terminal prompt profile that drops universal skill checks, removes forced tool quotas, and keeps the agent moving through tool sequences until a real blocker or completion point
 
 What is next:
 

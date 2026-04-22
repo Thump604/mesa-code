@@ -12,6 +12,7 @@ The direction is:
 - no Roo cloud auth commands in the supported CLI surface
 - `llama.cpp` and `vllm-mlx` as first-class runtimes
 - OpenAI-compatible and Anthropic-compatible endpoint support
+- terminal-native prompt profile with lean default tool/skill scaffolding
 - preset-aware `roo use` through the local ops control plane when available
 - managed direct-runtime bootstrap fallback through `roo use`
 - unified observability for local runtimes using Prometheus scrapes normalized into an OpenTelemetry-aligned namespace
@@ -28,6 +29,12 @@ directly at each call site. Task selection, mode changes, and task-message submi
 expressed as CLI-owned runtime operations rather than raw VS Code webview messages in the
 caller layer. Workspace file search for `@` mentions is also CLI-owned now, including
 ripgrep-backed indexing, fuzzy ranking, and `.rooignore` filtering.
+
+The CLI path also now uses a terminal-native prompt profile instead of the
+heavier editor-era defaults. That means skills are loaded when clearly relevant
+or explicitly requested, tool use is not quota-driven, and the agent is told to
+keep working until a real blocker or completion point instead of pausing after
+every successful tool call.
 
 ## Installation
 

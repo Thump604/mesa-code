@@ -575,6 +575,50 @@ describe("SYSTEM_PROMPT", () => {
 		expect(prompt).toContain("OBJECTIVE")
 	})
 
+	it("should use the terminal prompt profile when requested", async () => {
+		const mockSkillsManager = {
+			getSkillsForMode: vi.fn().mockReturnValue([
+				{
+					name: "code-review",
+					description: "Review code changes",
+					path: "/abs/path/code-review/SKILL.md",
+					source: "global" as const,
+				},
+			]),
+		}
+
+		const prompt = await SYSTEM_PROMPT(
+			mockContext,
+			"/test/path",
+			false,
+			undefined,
+			undefined,
+			defaultModeSlug,
+			undefined,
+			undefined,
+			undefined,
+			experiments,
+			undefined,
+			undefined,
+			{
+				todoListEnabled: true,
+				useAgentRules: true,
+				newTaskRequireTodos: false,
+				promptProfile: "terminal",
+			},
+			undefined,
+			undefined,
+			mockSkillsManager as any,
+		)
+
+		expect(prompt).toContain("Use tools when they materially advance the task")
+		expect(prompt).toContain("Do not pause after every successful tool call")
+		expect(prompt).toContain("explicitly requested or clearly relevant")
+		expect(prompt).not.toContain("You must call at least one tool per assistant response")
+		expect(prompt).not.toContain("<mandatory_skill_check>")
+		expect(prompt).not.toContain("It is critical you wait for the user's response after each tool use")
+	})
+
 	afterAll(() => {
 		vi.restoreAllMocks()
 	})

@@ -1,4 +1,6 @@
 import type { SkillsManager } from "../../../services/skills/SkillsManager"
+import type { SystemPromptSettings } from "../types"
+import { isTerminalPromptProfile } from "../types"
 
 type SkillsManagerLike = Pick<SkillsManager, "getSkillsForMode">
 
@@ -22,6 +24,7 @@ function escapeXml(value: string): string {
 export async function getSkillsSection(
 	skillsManager: SkillsManagerLike | undefined,
 	currentMode: string | undefined,
+	settings?: SystemPromptSettings,
 ): Promise<string> {
 	if (!skillsManager || !currentMode) return ""
 
@@ -37,6 +40,31 @@ export async function getSkillsSection(
 			return `  <skill>\n    <name>${name}</name>\n    <description>${description}</description>${locationLine}\n  </skill>`
 		})
 		.join("\n")
+
+	if (isTerminalPromptProfile(settings)) {
+		return `====
+
+AVAILABLE SKILLS
+
+<available_skills>
+${skillsXml}
+</available_skills>
+
+<skill_usage>
+- Use the skill tool when a skill is explicitly requested or clearly relevant to the current task.
+- Prefer the most specific relevant skill when multiple skills match.
+- Do NOT load skills speculatively or just because one might apply.
+- Do NOT load every skill up front.
+- Do NOT reload a skill whose instructions are already in this conversation.
+- Files linked from a skill are not loaded automatically. Read linked files only when they are actually needed.
+</skill_usage>
+
+<context_notes>
+- The skill list is already filtered for the current mode: "${currentMode}".
+- Mode-specific skills may come from skills-${currentMode}/ with project-level overrides taking precedence over global skills.
+</context_notes>
+`
+	}
 
 	return `====
 

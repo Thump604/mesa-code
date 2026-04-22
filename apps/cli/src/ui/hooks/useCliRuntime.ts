@@ -1,40 +1,12 @@
 import { useEffect, useRef, useCallback, useMemo } from "react"
 import { useApp } from "ink"
 import { randomUUID } from "crypto"
-import pWaitFor from "p-wait-for"
-import type { ExtensionMessage, HistoryItem } from "@roo-code/types"
+import type { ExtensionMessage } from "@roo-code/types"
 
 import type { CliRuntime, CliRuntimeOptions, CreateCliRuntime } from "@/runtime/index.js"
-import { arePathsEqual } from "@/lib/utils/path.js"
+import { resolveWorkspaceResumeSessionId } from "@/lib/task-history/index.js"
 
 import { useCLIStore } from "../store.js"
-
-const TASK_HISTORY_WAIT_TIMEOUT_MS = 2_000
-
-function extractTaskHistory(message: ExtensionMessage): HistoryItem[] | undefined {
-	if (message.type === "state" && Array.isArray(message.state?.taskHistory)) {
-		return message.state.taskHistory as HistoryItem[]
-	}
-
-	if (message.type === "taskHistoryUpdated" && Array.isArray(message.taskHistory)) {
-		return message.taskHistory as HistoryItem[]
-	}
-
-	return undefined
-}
-
-function getMostRecentTaskId(taskHistory: HistoryItem[], workspacePath: string): string | undefined {
-	const workspaceTasks = taskHistory.filter(
-		(item) => typeof item.workspace === "string" && arePathsEqual(item.workspace, workspacePath),
-	)
-
-	if (workspaceTasks.length === 0) {
-		return undefined
-	}
-
-	const sorted = [...workspaceTasks].sort((a, b) => b.ts - a.ts)
-	return sorted[0]?.id
-}
 
 export interface UseCliRuntimeOptions extends CliRuntimeOptions {
 	initialPrompt?: string
@@ -100,8 +72,6 @@ export function useCliRuntime({
 		const init = async () => {
 			try {
 				const requestedSessionId = initialSessionId?.trim()
-				let taskHistorySnapshot: HistoryItem[] = []
-				let hasReceivedTaskHistory = false
 
 				const runtime = createCliRuntime({
 					mode,
@@ -122,16 +92,7 @@ export function useCliRuntime({
 				runtimeRef.current = runtime
 				isReadyRef.current = true
 
-				runtime.onMessage((msg) => {
-					const taskHistory = extractTaskHistory(msg)
-
-					if (taskHistory) {
-						taskHistorySnapshot = taskHistory
-						hasReceivedTaskHistory = true
-					}
-
-					onRuntimeMessage(msg)
-				})
+				runtime.onMessage((msg) => onRuntimeMessage(msg))
 
 				runtime.onTaskCompleted(async () => {
 					setComplete(true)
@@ -154,25 +115,10 @@ export function useCliRuntime({
 				runtime.refreshCliMetadata()
 
 				if (requestedSessionId || continueSession) {
-					await pWaitFor(() => hasReceivedTaskHistory, {
-						interval: 25,
-						timeout: TASK_HISTORY_WAIT_TIMEOUT_MS,
-					}).catch(() => undefined)
-
-					if (requestedSessionId && hasReceivedTaskHistory) {
-						const hasRequestedTask = taskHistorySnapshot.some((item) => item.id === requestedSessionId)
-
-						if (!hasRequestedTask) {
-							throw new Error(`Session not found in task history: ${requestedSessionId}`)
-						}
-					}
-
-					const resolvedSessionId =
-						requestedSessionId || getMostRecentTaskId(taskHistorySnapshot, workspacePath)
-
-					if (continueSession && !resolvedSessionId) {
-						throw new Error("No previous tasks found to continue in this workspace.")
-					}
+					const resolvedSessionId = resolveWorkspaceResumeSessionId(
+						await runtime.readTaskHistory(),
+						requestedSessionId,
+					)
 
 					if (resolvedSessionId) {
 						setCurrentTaskId(resolvedSessionId)

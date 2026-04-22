@@ -29,4 +29,29 @@ describe("getSkillsSection", () => {
 		await expect(getSkillsSection(undefined, "code")).resolves.toBe("")
 		await expect(getSkillsSection({ getSkillsForMode: vi.fn() }, undefined)).resolves.toBe("")
 	})
+
+	it("should use opt-in skill guidance for the terminal prompt profile", async () => {
+		const mockSkillsManager = {
+			getSkillsForMode: vi.fn().mockReturnValue([
+				{
+					name: "pdf-processing",
+					description: "Extracts text & tables from PDFs",
+					path: "/abs/path/pdf-processing/SKILL.md",
+					source: "global" as const,
+				},
+			]),
+		}
+
+		const result = await getSkillsSection(mockSkillsManager, "code", {
+			todoListEnabled: true,
+			useAgentRules: true,
+			newTaskRequireTodos: false,
+			promptProfile: "terminal",
+		})
+
+		expect(result).toContain("<skill_usage>")
+		expect(result).toContain("explicitly requested or clearly relevant")
+		expect(result).toContain("Do NOT load skills speculatively")
+		expect(result).not.toContain("<mandatory_skill_check>")
+	})
 })

@@ -225,4 +225,17 @@ describe("getRulesSection shell-aware command chaining", () => {
 
 		expect(result).not.toContain("Note: Using")
 	})
+
+	it("uses terminal-native tool pacing guidance for the terminal prompt profile", () => {
+		vi.spyOn(shellUtils, "getShell").mockReturnValue("/bin/zsh")
+		const result = getRulesSection(cwd, {
+			todoListEnabled: true,
+			useAgentRules: true,
+			newTaskRequireTodos: false,
+			promptProfile: "terminal",
+		})
+
+		expect(result).toContain("Do not pause after every successful tool call")
+		expect(result).not.toContain("It is critical you wait for the user's response after each tool use")
+	})
 })

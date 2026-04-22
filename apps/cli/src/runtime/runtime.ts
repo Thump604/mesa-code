@@ -1,3 +1,4 @@
+import type { TaskSessionEntry } from "@roo-code/core/cli"
 import type { ClineAsk, ExtensionMessage, ReasoningEffortExtended, RooCodeSettings } from "@roo-code/types"
 
 import type { SupportedProvider } from "@/types/index.js"
@@ -46,6 +47,7 @@ export interface CliRuntime {
 	onTaskCompleted(listener: (event: TaskCompletedEvent) => void): () => void
 	onError(listener: (error: Error) => void): () => void
 	attachJsonEmitter(emitter: JsonEventEmitter): void
+	readTaskHistory(): Promise<TaskSessionEntry[]>
 	getRuntimeOptions(): Pick<CliRuntimeOptions, "provider" | "apiKey" | "baseUrl">
 	getAgentState(): AgentStateInfo
 	isWaitingForInput(): boolean

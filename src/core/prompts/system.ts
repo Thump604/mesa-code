@@ -76,7 +76,7 @@ async function generatePrompt(
 
 	const [modesSection, skillsSection] = await Promise.all([
 		getModesSection(context),
-		getSkillsSection(skillsManager, mode as string),
+		getSkillsSection(skillsManager, mode as string, settings),
 	])
 
 	// Tools catalog is not included in the system prompt.
@@ -86,9 +86,9 @@ async function generatePrompt(
 
 ${markdownFormattingSection()}
 
-${getSharedToolUseSection()}${toolsCatalog}
+${getSharedToolUseSection(settings)}${toolsCatalog}
 
-	${getToolUseGuidelinesSection()}
+	${getToolUseGuidelinesSection(settings)}
 
 ${getCapabilitiesSection(cwd, shouldIncludeMcp ? mcpHub : undefined)}
 
@@ -98,7 +98,7 @@ ${getRulesSection(cwd, settings)}
 
 ${getSystemInfoSection(cwd)}
 
-${getObjectiveSection()}
+${getObjectiveSection(settings)}
 
 ${await addCustomInstructions(baseInstructions, globalCustomInstructions || "", cwd, mode, {
 	language: language ?? formatLanguage(vscode.env.language),

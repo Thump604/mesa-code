@@ -343,6 +343,15 @@ export class BundleApiCliRuntime implements CliRuntime {
 		emitter.attachToClient(this.client)
 	}
 
+	async readTaskHistory(): Promise<TaskSessionEntry[]> {
+		if (!this.globalStoragePath) {
+			return []
+		}
+
+		const sessions = await this.deps.readTaskSessions(this.globalStoragePath)
+		return filterSessionsForWorkspace(sessions, this.options.workspacePath)
+	}
+
 	getRuntimeOptions(): Pick<CliRuntimeOptions, "provider" | "apiKey" | "baseUrl"> {
 		return {
 			provider: this.options.provider,

@@ -28,6 +28,7 @@ A CLI-native coding agent for local and private environments:
 - import path for Roo users
 - strong session and automation ergonomics
 - strong MCP and tool execution controls
+- minimal default prompt/tool overhead, with heavier workflows layered on intentionally
 
 ### What we are not building first
 
@@ -162,6 +163,7 @@ Goal: stop treating the CLI as a thin shell around the extension runtime.
 - move task/session/mode/search operations behind CLI-owned runtime methods instead of raw webview-message verbs
 - use the activated extension bundle API as a transitional backend instead of the fake webview transport while the CLI-native engine is carved out
 - keep search/autocomplete paths moving to CLI-owned modules first so interactive UX stops depending on extension-side helpers
+- use a terminal-native prompt profile so TUI and command/file flows are not burdened by editor-era universal skill checks or stop-after-every-tool instructions
 - move session storage and state handling into CLI-owned modules
 - replace extension-host mediated discovery and control paths with direct CLI-owned implementations
 - keep structured output modes stable: text, json, stream-json

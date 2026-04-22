@@ -3810,6 +3810,7 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 						.getConfiguration(Package.name)
 						.get<boolean>("newTaskRequireTodos", false),
 					isStealthModel: modelInfo?.isStealthModel,
+					promptProfile: process.env.ROO_CLI_RUNTIME === "1" ? "terminal" : "default",
 				},
 				undefined, // todoList
 				this.api.getModel().id,

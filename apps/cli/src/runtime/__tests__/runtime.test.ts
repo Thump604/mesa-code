@@ -198,4 +198,21 @@ describe("BundleApiCliRuntime", () => {
 
 		await runtime.dispose()
 	})
+
+	it("reads task history through the runtime boundary", async () => {
+		const { runtime } = createRuntimeHarness()
+
+		await runtime.activate()
+
+		await expect(runtime.readTaskHistory()).resolves.toEqual([
+			{
+				id: "task-1",
+				task: "hello",
+				ts: 100,
+				workspace: "/workspace",
+			},
+		])
+
+		await runtime.dispose()
+	})
 })

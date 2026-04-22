@@ -1,4 +1,15 @@
-export function getToolUseGuidelinesSection(): string {
+import type { SystemPromptSettings } from "../types"
+import { isTerminalPromptProfile } from "../types"
+
+export function getToolUseGuidelinesSection(settings?: SystemPromptSettings): string {
+	if (isTerminalPromptProfile(settings)) {
+		return `# Tool Use Guidelines
+
+1. Assess what information you already have and what information you still need to make real progress.
+2. Choose the tool that best matches the current step instead of defaulting to generic command execution.
+3. Chain related tool calls when the next step is clear from the current result. Do not stop after each successful tool call; keep going until you hit a real blocker, need approval or input, or are ready to complete the task.`
+	}
+
 	return `# Tool Use Guidelines
 
 1. Assess what information you already have and what information you need to proceed with the task.

@@ -28,4 +28,17 @@ describe("getSharedToolUseSection", () => {
 		expect(section).not.toContain("<actual_tool_name>")
 		expect(section).not.toContain("</actual_tool_name>")
 	})
+
+	it("should use a lighter tool contract for the terminal prompt profile", () => {
+		const section = getSharedToolUseSection({
+			todoListEnabled: true,
+			useAgentRules: true,
+			newTaskRequireTodos: false,
+			promptProfile: "terminal",
+		})
+
+		expect(section).toContain("Use tools when they materially advance the task")
+		expect(section).toContain("Do not call tools just to satisfy a quota")
+		expect(section).not.toContain("You must call at least one tool per assistant response")
+	})
 })
