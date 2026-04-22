@@ -30,9 +30,12 @@ expressed as CLI-owned runtime operations rather than raw VS Code webview messag
 caller layer. TUI and print-mode entrypoints also now share one runtime-backed session
 controller for `start`, `resume`, and `continue`, including shared runtime creation,
 activation, resolution, action methods, and disposal hooks instead of each surface
-carrying its own session bootstrap and runtime wiring. Print-mode terminal output and
-approval prompting now also live in an explicit CLI text surface instead of being hidden
-inside the runtime backend, so the runtime boundary is closer to transport/session only.
+carrying its own session bootstrap and runtime wiring. They now also share one
+session-lifecycle contract for launch, completion, error, and resume behavior,
+with only surface-specific rendering above that layer. Print-mode terminal output
+and approval prompting now also live in an explicit CLI text surface instead of
+being hidden inside the runtime backend, so the runtime boundary is closer to
+transport/session only.
 Workspace
 file search for `@` mentions is also CLI-owned now, including
 ripgrep-backed indexing, fuzzy ranking, and `.rooignore` filtering.

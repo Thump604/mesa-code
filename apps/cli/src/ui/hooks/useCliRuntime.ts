@@ -1,11 +1,13 @@
 import { useEffect, useRef, useCallback, useMemo } from "react"
 import { useApp } from "ink"
-import { randomUUID } from "crypto"
-import type { ExtensionMessage } from "@roo-code/types"
 
 import { CliSessionController, type CliRuntimeOptions, type CreateCliRuntime } from "@/runtime/index.js"
+import { createSessionLifecycleStartOptions } from "@/runtime/index.js"
 
 import { useCLIStore } from "../store.js"
+import { createTuiSessionLifecycle } from "../tui-session-lifecycle.js"
+
+import type { ExtensionMessage } from "@roo-code/types"
 
 export interface UseCliRuntimeOptions extends CliRuntimeOptions {
 	initialPrompt?: string
@@ -99,50 +101,31 @@ export function useCliRuntime({
 				})
 				sessionControllerRef.current = sessionController
 
-				await sessionController.start({
-					initialLaunch: {
+				const lifecycle = createTuiSessionLifecycle({
+					onRuntimeMessage,
+					exitOnComplete,
+					onExit: exit,
+					cleanup,
+					addMessage,
+					setComplete,
+					setLoading,
+					setHasStartedTask,
+					setError,
+					setCurrentTaskId,
+					setIsResumingTask,
+					clearPendingInitialTaskId: () => {
+						pendingInitialTaskIdRef.current = undefined
+					},
+				})
+
+				await sessionController.start(
+					createSessionLifecycleStartOptions(sessionController, lifecycle, {
 						initialPrompt,
 						initialTaskId: pendingInitialTaskIdRef.current,
 						initialSessionId: requestedSessionId,
 						continueSession,
-					},
-					onMessage: onRuntimeMessage,
-					onTaskCompleted: async () => {
-						setComplete(true)
-						setLoading(false)
-
-						if (exitOnComplete) {
-							await cleanup()
-							exit()
-							setTimeout(() => process.exit(0), 100)
-						}
-					},
-					onError: (err: Error) => {
-						setError(err.message)
-						setLoading(false)
-					},
-					afterActivate: () => {
-						sessionController.refreshCliMetadata()
-					},
-					onIdle: () => {
-						setLoading(false)
-					},
-					onResume: async (launch) => {
-						setCurrentTaskId(launch.sessionId)
-						setIsResumingTask(true)
-						setHasStartedTask(true)
-						setLoading(true)
-						sessionController.selectTask(launch.sessionId)
-					},
-					onStart: async (launch) => {
-						setLoading(false)
-						setHasStartedTask(true)
-						setLoading(true)
-						addMessage({ id: randomUUID(), role: "user", content: launch.prompt })
-						pendingInitialTaskIdRef.current = undefined
-						await sessionController.runTask(launch.prompt, launch.taskId)
-					},
-				})
+					}),
+				)
 				isReadyRef.current = true
 			} catch (err) {
 				setError(err instanceof Error ? err.message : String(err))

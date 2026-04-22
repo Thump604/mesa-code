@@ -21,8 +21,13 @@ import {
 } from "@/types/index.js"
 import { isValidOutputFormat } from "@/types/json-events.js"
 import { JsonEventEmitter } from "@/agent/json-event-emitter.js"
-import { TextSessionSurface } from "@/agent/text-session-surface.js"
-import { CliSessionController, createCliRuntime, type CliRuntime, type CliRuntimeOptions } from "@/runtime/index.js"
+import {
+	CliSessionController,
+	createCliRuntime,
+	createSessionLifecycleStartOptions,
+	type CliRuntime,
+	type CliRuntimeOptions,
+} from "@/runtime/index.js"
 
 import { getOpsModeContract, resolveOpsBaseUrl } from "@/lib/ops-control-plane.js"
 import { loadSettings } from "@/lib/storage/index.js"
@@ -43,6 +48,7 @@ import { isValidSessionId } from "@/lib/utils/session-id.js"
 import { VERSION } from "@/lib/utils/version.js"
 
 import { isExpectedControlFlowError } from "./cancellation.js"
+import { createNonInteractiveSessionLifecycle } from "./noninteractive-session-lifecycle.js"
 import { runStdinStreamMode } from "./stdin-stream.js"
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -475,7 +481,7 @@ export async function run(promptArg: string | undefined, flagOptions: FlagOption
 		runtimeOptions.disableOutput = true
 
 		let sessionController: CliSessionController | null = null
-		let textSurface: TextSessionSurface | null = null
+		let sessionLifecycle: ReturnType<typeof createNonInteractiveSessionLifecycle> | null = null
 		let streamRequestId: string | undefined
 		let keepAliveInterval: NodeJS.Timeout | undefined
 		let isShuttingDown = false
@@ -545,10 +551,8 @@ export async function run(promptArg: string | undefined, flagOptions: FlagOption
 			}
 
 			runtimeDisposed = true
-			if (textSurface) {
-				await textSurface.dispose()
-				textSurface = null
-			}
+			await sessionLifecycle?.dispose?.()
+			sessionLifecycle = null
 			jsonEmitter?.detach()
 			await sessionController.cleanup()
 		}
@@ -648,36 +652,23 @@ export async function run(promptArg: string | undefined, flagOptions: FlagOption
 				runtimeOptions,
 			})
 			const activeSessionController = sessionController
+			sessionLifecycle = createNonInteractiveSessionLifecycle({
+				useJsonOutput,
+				jsonEmitter,
+				nonInteractive: runtimeOptions.nonInteractive ?? false,
+				exitOnError: runtimeOptions.exitOnError,
+				stdinPromptStream: useStdinPromptStream,
+				bootstrapResumeForStdinStream,
+			})
 
-			const startedSession = await activeSessionController.start({
-				initialLaunch: {
+			const startedSession = await activeSessionController.start(
+				createSessionLifecycleStartOptions(activeSessionController, sessionLifecycle, {
 					initialPrompt: prompt,
 					initialTaskId: requestedCreateSessionId,
 					initialSessionId: requestedSessionId,
 					continueSession: shouldContinueSession,
-				},
-				onResume: useStdinPromptStream
-					? async (launch) => {
-							await bootstrapResumeForStdinStream(
-								activeSessionController.getRuntimeOrThrow(),
-								launch.sessionId,
-							)
-						}
-					: undefined,
-				afterActivate: (activeRuntime) => {
-					if (!useJsonOutput) {
-						textSurface = new TextSessionSurface(activeRuntime, {
-							nonInteractive: runtimeOptions.nonInteractive,
-							exitOnError: runtimeOptions.exitOnError,
-						})
-						textSurface.attach()
-					}
-
-					if (jsonEmitter) {
-						activeSessionController.attachJsonEmitter(jsonEmitter)
-					}
-				},
-			})
+				}),
+			)
 
 			if (useStdinPromptStream) {
 				if (!jsonEmitter || outputFormat !== "stream-json") {
