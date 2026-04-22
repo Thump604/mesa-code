@@ -14,7 +14,9 @@ The direction is:
 
 The transition is in progress. Discovery flows like `roo list commands`, `roo list modes`,
 `roo list models`, and `roo list sessions` are already CLI-native. Some interactive runtime
-paths still reuse upstream compatibility layers while that execution core is being pulled out.
+paths still reuse upstream compatibility layers while that execution core is being pulled out,
+but interactive entrypoints now go through a CLI-owned runtime boundary instead of constructing
+the extension host directly at each call site.
 
 ## Installation
 

@@ -15,7 +15,7 @@ export interface UsePickerHandlersOptions {
 	autocompleteRef: React.RefObject<AutocompleteInputHandle<any>>
 	// eslint-disable-next-line @typescript-eslint/no-explicit-any
 	followupAutocompleteRef: React.RefObject<AutocompleteInputHandle<any>>
-	sendToExtension: ((msg: WebviewMessage) => void) | null
+	sendRuntimeMessage: ((msg: WebviewMessage) => void) | null
 	showInfo: (msg: string, duration?: number) => void
 	seenMessageIds: React.MutableRefObject<Set<string>>
 	firstTextMessageSkipped: React.MutableRefObject<boolean>
@@ -43,7 +43,7 @@ export interface UsePickerHandlersReturn {
 export function usePickerHandlers({
 	autocompleteRef,
 	followupAutocompleteRef,
-	sendToExtension,
+	sendRuntimeMessage,
 	showInfo,
 	seenMessageIds,
 	firstTextMessageSkipped,
@@ -72,8 +72,8 @@ export function usePickerHandlers({
 			if (pickerState.activeTrigger?.id === "mode" && item && typeof item === "object" && "slug" in item) {
 				const modeItem = item as ModeResult
 
-				if (sendToExtension) {
-					sendToExtension({ type: "mode", text: modeItem.slug })
+				if (sendRuntimeMessage) {
+					sendRuntimeMessage({ type: "mode", text: modeItem.slug })
 				}
 
 				autocompleteRef.current?.closePicker()
@@ -98,8 +98,8 @@ export function usePickerHandlers({
 					return
 				}
 
-				// Send showTaskWithId message to extension to resume the task
-				if (sendToExtension) {
+				// Ask the runtime to switch to the selected task history entry.
+				if (sendRuntimeMessage) {
 					// Use selective reset that preserves global state (taskHistory, modes, commands)
 					useCLIStore.getState().resetForTaskSwitch()
 					// Set the resuming flag so message handlers know we're resuming
@@ -111,10 +111,9 @@ export function usePickerHandlers({
 					seenMessageIds.current.clear()
 					firstTextMessageSkipped.current = false
 
-					// Send message to resume the selected task
-					// This triggers createTaskWithHistoryItem -> postStateToWebview
-					// which includes clineMessages and handles mode restoration
-					sendToExtension({ type: "showTaskWithId", text: historyItem.id })
+					// This triggers createTaskWithHistoryItem -> postStateToWebview,
+					// which includes clineMessages and handles mode restoration.
+					sendRuntimeMessage({ type: "showTaskWithId", text: historyItem.id })
 				}
 
 				// Close the picker
@@ -132,7 +131,7 @@ export function usePickerHandlers({
 			showInfo,
 			currentTaskId,
 			setCurrentTaskId,
-			sendToExtension,
+			sendRuntimeMessage,
 			autocompleteRef,
 			followupAutocompleteRef,
 			seenMessageIds,

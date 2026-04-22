@@ -2,7 +2,7 @@ import { Box, Text, useApp, useInput } from "ink"
 import { Select } from "@inkjs/ui"
 import { useState, useEffect, useCallback, useRef, useMemo } from "react"
 
-import { ExtensionHostInterface, ExtensionHostOptions } from "@/agent/index.js"
+import type { CliRuntimeOptions, CreateCliRuntime } from "@/runtime/index.js"
 
 import { getGlobalCommandsForAutocomplete } from "@/lib/utils/commands.js"
 import { arePathsEqual } from "@/lib/utils/path.js"
@@ -17,7 +17,7 @@ import {
 	TerminalSizeProvider,
 	useTerminalSize,
 	useToast,
-	useExtensionHost,
+	useCliRuntime,
 	useMessageHandlers,
 	useTaskSubmit,
 	useGlobalInput,
@@ -58,20 +58,19 @@ import ScrollIndicator from "./components/ScrollIndicator.js"
 
 const PICKER_HEIGHT = 10
 
-export interface TUIAppProps extends ExtensionHostOptions {
+export interface TUIAppProps extends CliRuntimeOptions {
 	initialPrompt?: string
 	initialTaskId?: string
 	initialSessionId?: string
 	continueSession?: boolean
 	version: string
-	// Create extension host factory for dependency injection.
-	createExtensionHost: (options: ExtensionHostOptions) => ExtensionHostInterface
+	createCliRuntime: CreateCliRuntime
 }
 
 /**
  * Inner App component that uses the terminal size context
  */
-function AppInner({ createExtensionHost, ...extensionHostOptions }: TUIAppProps) {
+function AppInner({ createCliRuntime, ...runtimeOptions }: TUIAppProps) {
 	const {
 		initialPrompt,
 		initialTaskId,
@@ -90,7 +89,7 @@ function AppInner({ createExtensionHost, ...extensionHostOptions }: TUIAppProps)
 		reasoningEffort,
 		ephemeral,
 		version,
-	} = extensionHostOptions
+	} = runtimeOptions
 
 	const { exit } = useApp()
 
@@ -174,7 +173,7 @@ function AppInner({ createExtensionHost, ...extensionHostOptions }: TUIAppProps)
 		nonInteractive,
 	})
 
-	const { sendToExtension, runTask, cleanup } = useExtensionHost({
+	const { sendRuntimeMessage, runTask, cleanup } = useCliRuntime({
 		initialPrompt,
 		initialTaskId,
 		initialSessionId,
@@ -191,13 +190,13 @@ function AppInner({ createExtensionHost, ...extensionHostOptions }: TUIAppProps)
 		nonInteractive,
 		ephemeral,
 		exitOnComplete,
-		onExtensionMessage: handleExtensionMessage,
-		createExtensionHost,
+		onRuntimeMessage: handleExtensionMessage,
+		createCliRuntime,
 	})
 
 	// Initialize task submit hook
 	const { handleSubmit, handleApprove, handleReject } = useTaskSubmit({
-		sendToExtension,
+		sendRuntimeMessage,
 		runTask,
 		seenMessageIds,
 		firstTextMessageSkipped,
@@ -220,7 +219,7 @@ function AppInner({ createExtensionHost, ...extensionHostOptions }: TUIAppProps)
 		usePickerHandlers({
 			autocompleteRef,
 			followupAutocompleteRef,
-			sendToExtension,
+			sendRuntimeMessage,
 			showInfo,
 			seenMessageIds,
 			firstTextMessageSkipped,
@@ -234,7 +233,7 @@ function AppInner({ createExtensionHost, ...extensionHostOptions }: TUIAppProps)
 		availableModes,
 		currentMode,
 		mode,
-		sendToExtension,
+		sendRuntimeMessage,
 		showInfo,
 		exit,
 		cleanup,
@@ -292,12 +291,12 @@ function AppInner({ createExtensionHost, ...extensionHostOptions }: TUIAppProps)
 	// File search handler for the file trigger
 	const handleFileSearch = useCallback(
 		(query: string) => {
-			if (!sendToExtension) {
+			if (!sendRuntimeMessage) {
 				return
 			}
-			sendToExtension({ type: "searchFiles", query })
+			sendRuntimeMessage({ type: "searchFiles", query })
 		},
-		[sendToExtension],
+		[sendRuntimeMessage],
 	)
 
 	// Create autocomplete triggers
@@ -464,7 +463,7 @@ function AppInner({ createExtensionHost, ...extensionHostOptions }: TUIAppProps)
 			{/* Header - fixed size */}
 			<Box flexShrink={0}>
 				<Header
-					{...extensionHostOptions}
+					{...runtimeOptions}
 					mode={currentMode || mode}
 					version={version}
 					tokenUsage={tokenUsage}

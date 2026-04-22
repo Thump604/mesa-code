@@ -4,7 +4,7 @@ import { randomUUID } from "crypto"
 import pWaitFor from "p-wait-for"
 import type { ExtensionMessage, HistoryItem, WebviewMessage } from "@roo-code/types"
 
-import { ExtensionHostInterface, ExtensionHostOptions } from "@/agent/index.js"
+import type { CliRuntime, CliRuntimeOptions, CreateCliRuntime } from "@/runtime/index.js"
 import { arePathsEqual } from "@/lib/utils/path.js"
 
 import { useCLIStore } from "../store.js"
@@ -36,33 +36,23 @@ function getMostRecentTaskId(taskHistory: HistoryItem[], workspacePath: string):
 	return sorted[0]?.id
 }
 
-// TODO: Unify with TUIAppProps?
-export interface UseExtensionHostOptions extends ExtensionHostOptions {
+export interface UseCliRuntimeOptions extends CliRuntimeOptions {
 	initialPrompt?: string
 	initialTaskId?: string
 	initialSessionId?: string
 	continueSession?: boolean
-	onExtensionMessage: (msg: ExtensionMessage) => void
-	createExtensionHost: (options: ExtensionHostOptions) => ExtensionHostInterface
+	onRuntimeMessage: (msg: ExtensionMessage) => void
+	createCliRuntime: CreateCliRuntime
 }
 
-export interface UseExtensionHostReturn {
+export interface UseCliRuntimeReturn {
 	isReady: boolean
-	sendToExtension: ((msg: WebviewMessage) => void) | null
+	sendRuntimeMessage: ((msg: WebviewMessage) => void) | null
 	runTask: ((prompt: string) => Promise<void>) | null
 	cleanup: () => Promise<void>
 }
 
-/**
- * Hook to manage the extension host lifecycle.
- *
- * Responsibilities:
- * - Initialize the extension host
- * - Set up event listeners for messages, task completion, and errors
- * - Handle cleanup/disposal
- * - Expose methods for sending messages and running tasks
- */
-export function useExtensionHost({
+export function useCliRuntime({
 	initialPrompt,
 	initialTaskId,
 	initialSessionId,
@@ -79,21 +69,21 @@ export function useExtensionHost({
 	ephemeral,
 	debug,
 	exitOnComplete,
-	onExtensionMessage,
-	createExtensionHost,
-}: UseExtensionHostOptions): UseExtensionHostReturn {
+	onRuntimeMessage,
+	createCliRuntime,
+}: UseCliRuntimeOptions): UseCliRuntimeReturn {
 	const { exit } = useApp()
 	const { addMessage, setComplete, setLoading, setHasStartedTask, setError, setCurrentTaskId, setIsResumingTask } =
 		useCLIStore()
 
-	const hostRef = useRef<ExtensionHostInterface | null>(null)
+	const runtimeRef = useRef<CliRuntime | null>(null)
 	const isReadyRef = useRef(false)
 	const pendingInitialTaskIdRef = useRef<string | undefined>(initialTaskId?.trim() || undefined)
 
 	const cleanup = useCallback(async () => {
-		if (hostRef.current) {
-			await hostRef.current.dispose()
-			hostRef.current = null
+		if (runtimeRef.current) {
+			await runtimeRef.current.dispose()
+			runtimeRef.current = null
 			isReadyRef.current = false
 		}
 	}, [])
@@ -105,7 +95,7 @@ export function useExtensionHost({
 				let taskHistorySnapshot: HistoryItem[] = []
 				let hasReceivedTaskHistory = false
 
-				const host = createExtensionHost({
+				const runtime = createCliRuntime({
 					mode,
 					user,
 					reasoningEffort,
@@ -121,22 +111,21 @@ export function useExtensionHost({
 					disableOutput: true,
 				})
 
-				hostRef.current = host
+				runtimeRef.current = runtime
 				isReadyRef.current = true
 
-				host.on("extensionWebviewMessage", (msg) => {
-					const extensionMessage = msg as ExtensionMessage
-					const taskHistory = extractTaskHistory(extensionMessage)
+				runtime.onMessage((msg) => {
+					const taskHistory = extractTaskHistory(msg)
 
 					if (taskHistory) {
 						taskHistorySnapshot = taskHistory
 						hasReceivedTaskHistory = true
 					}
 
-					onExtensionMessage(extensionMessage)
+					onRuntimeMessage(msg)
 				})
 
-				host.client.on("taskCompleted", async () => {
+				runtime.onTaskCompleted(async () => {
 					setComplete(true)
 					setLoading(false)
 
@@ -147,17 +136,15 @@ export function useExtensionHost({
 					}
 				})
 
-				host.client.on("error", (err: Error) => {
+				runtime.onError((err: Error) => {
 					setError(err.message)
 					setLoading(false)
 				})
 
-				await host.activate()
+				await runtime.activate()
 
-				// Request initial state from extension (triggers
-				// postStateToWebview which includes taskHistory).
-				host.sendToExtension({ type: "requestCommands" })
-				host.sendToExtension({ type: "requestModes" })
+				runtime.sendMessage({ type: "requestCommands" })
+				runtime.sendMessage({ type: "requestModes" })
 
 				if (requestedSessionId || continueSession) {
 					await pWaitFor(() => hasReceivedTaskHistory, {
@@ -185,7 +172,7 @@ export function useExtensionHost({
 						setIsResumingTask(true)
 						setHasStartedTask(true)
 						setLoading(true)
-						host.sendToExtension({ type: "showTaskWithId", text: resolvedSessionId })
+						runtime.sendMessage({ type: "showTaskWithId", text: resolvedSessionId })
 						return
 					}
 				}
@@ -198,7 +185,7 @@ export function useExtensionHost({
 					addMessage({ id: randomUUID(), role: "user", content: initialPrompt })
 					const taskId = pendingInitialTaskIdRef.current
 					pendingInitialTaskIdRef.current = undefined
-					await host.runTask(initialPrompt, taskId)
+					await runtime.runTask(initialPrompt, taskId)
 				}
 			} catch (err) {
 				setError(err instanceof Error ? err.message : String(err))
@@ -213,27 +200,22 @@ export function useExtensionHost({
 		}
 	}, []) // Run once on mount
 
-	// Stable sendToExtension - uses ref to always access current host.
-	// This function reference never changes, preventing downstream
-	// useCallback/useMemo invalidations.
-	const sendToExtension = useCallback((msg: WebviewMessage) => {
-		hostRef.current?.sendToExtension(msg)
+	const sendRuntimeMessage = useCallback((msg: WebviewMessage) => {
+		runtimeRef.current?.sendMessage(msg)
 	}, [])
 
-	// Stable runTask - uses ref to always access current host.
 	const runTask = useCallback((prompt: string): Promise<void> => {
-		if (!hostRef.current) {
-			return Promise.reject(new Error("Extension host not ready"))
+		if (!runtimeRef.current) {
+			return Promise.reject(new Error("CLI runtime not ready"))
 		}
 
 		const taskId = pendingInitialTaskIdRef.current
 		pendingInitialTaskIdRef.current = undefined
-		return hostRef.current.runTask(prompt, taskId)
+		return runtimeRef.current.runTask(prompt, taskId)
 	}, [])
 
-	// Memoized return object to prevent unnecessary re-renders in consumers.
 	return useMemo(
-		() => ({ isReady: isReadyRef.current, sendToExtension, runTask, cleanup }),
-		[sendToExtension, runTask, cleanup],
+		() => ({ isReady: isReadyRef.current, sendRuntimeMessage, runTask, cleanup }),
+		[sendRuntimeMessage, runTask, cleanup],
 	)
 }

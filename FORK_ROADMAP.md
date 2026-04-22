@@ -153,6 +153,7 @@ Exit criteria:
 Goal: stop treating the CLI as a thin shell around the extension runtime.
 
 - carve out a CLI-native execution core
+- introduce a CLI-owned `CliRuntime` boundary so `run`, TUI, and stdin-stream stop depending directly on the VS Code host API
 - move session storage and state handling into CLI-owned modules
 - replace extension-host mediated discovery and control paths with direct CLI-owned implementations
 - keep structured output modes stable: text, json, stream-json

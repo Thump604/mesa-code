@@ -8,7 +8,7 @@ import { useCLIStore } from "../store.js"
 import { useUIStateStore } from "../stores/uiStateStore.js"
 
 export interface UseTaskSubmitOptions {
-	sendToExtension: ((msg: WebviewMessage) => void) | null
+	sendRuntimeMessage: ((msg: WebviewMessage) => void) | null
 	runTask: ((prompt: string) => Promise<void>) | null
 	seenMessageIds: React.MutableRefObject<Set<string>>
 	firstTextMessageSkipped: React.MutableRefObject<boolean>
@@ -31,7 +31,7 @@ export interface UseTaskSubmitReturn {
  * - Handle Y/N approval responses
  */
 export function useTaskSubmit({
-	sendToExtension,
+	sendRuntimeMessage,
 	runTask,
 	seenMessageIds,
 	firstTextMessageSkipped,
@@ -55,7 +55,7 @@ export function useTaskSubmit({
 	 */
 	const handleSubmit = useCallback(
 		async (text: string) => {
-			if (!sendToExtension || !text.trim()) {
+			if (!sendRuntimeMessage || !text.trim()) {
 				return
 			}
 
@@ -79,11 +79,11 @@ export function useTaskSubmit({
 						// Reset component-level refs to avoid stale message tracking.
 						seenMessageIds.current.clear()
 						firstTextMessageSkipped.current = false
-						sendToExtension({ type: "clearTask" })
+						sendRuntimeMessage({ type: "clearTask" })
 
 						// Re-request state, commands and modes since reset() cleared them.
-						sendToExtension({ type: "requestCommands" })
-						sendToExtension({ type: "requestModes" })
+						sendRuntimeMessage({ type: "requestCommands" })
+						sendRuntimeMessage({ type: "requestModes" })
 						return
 					}
 				}
@@ -92,7 +92,7 @@ export function useTaskSubmit({
 			if (pendingAsk) {
 				addMessage({ id: randomUUID(), role: "user", content: trimmedText })
 
-				sendToExtension({
+				sendRuntimeMessage({
 					type: "askResponse",
 					askResponse: "messageResponse",
 					text: trimmedText,
@@ -123,7 +123,7 @@ export function useTaskSubmit({
 				setLoading(true)
 				addMessage({ id: randomUUID(), role: "user", content: trimmedText })
 
-				sendToExtension({
+				sendRuntimeMessage({
 					type: "askResponse",
 					askResponse: "messageResponse",
 					text: trimmedText,
@@ -131,7 +131,7 @@ export function useTaskSubmit({
 			}
 		},
 		[
-			sendToExtension,
+			sendRuntimeMessage,
 			runTask,
 			pendingAsk,
 			hasStartedTask,
@@ -153,27 +153,27 @@ export function useTaskSubmit({
 	 * Handle approval (Y key)
 	 */
 	const handleApprove = useCallback(() => {
-		if (!sendToExtension) {
+		if (!sendRuntimeMessage) {
 			return
 		}
 
-		sendToExtension({ type: "askResponse", askResponse: "yesButtonClicked" })
+		sendRuntimeMessage({ type: "askResponse", askResponse: "yesButtonClicked" })
 		setPendingAsk(null)
 		setLoading(true)
-	}, [sendToExtension, setPendingAsk, setLoading])
+	}, [sendRuntimeMessage, setPendingAsk, setLoading])
 
 	/**
 	 * Handle rejection (N key)
 	 */
 	const handleReject = useCallback(() => {
-		if (!sendToExtension) {
+		if (!sendRuntimeMessage) {
 			return
 		}
 
-		sendToExtension({ type: "askResponse", askResponse: "noButtonClicked" })
+		sendRuntimeMessage({ type: "askResponse", askResponse: "noButtonClicked" })
 		setPendingAsk(null)
 		setLoading(true)
-	}, [sendToExtension, setPendingAsk, setLoading])
+	}, [sendRuntimeMessage, setPendingAsk, setLoading])
 
 	return {
 		handleSubmit,

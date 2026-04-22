@@ -10,9 +10,9 @@ import {
 
 import { isRecord } from "@/lib/utils/guards.js"
 import { isValidSessionId } from "@/lib/utils/session-id.js"
+import type { CliRuntime } from "@/runtime/index.js"
 import { isCancellationLikeError, isExpectedControlFlowError, isNoActiveTaskLikeError } from "./cancellation.js"
 
-import type { ExtensionHost } from "@/agent/index.js"
 import type { JsonEventEmitter } from "@/agent/json-event-emitter.js"
 
 // ---------------------------------------------------------------------------
@@ -228,7 +228,7 @@ function areStringArraysEqual(a: string[], b: string[]): boolean {
 // ---------------------------------------------------------------------------
 
 export interface StdinStreamModeOptions {
-	host: ExtensionHost
+	runtime: CliRuntime
 	jsonEmitter: JsonEventEmitter
 	setStreamRequestId: (id: string | undefined) => void
 }
@@ -255,8 +255,8 @@ export function shouldSendMessageAsAskResponse(waitingForInput: boolean, current
 	return waitingForInput && typeof currentAsk === "string" && MESSAGE_AS_ASK_RESPONSE_ASKS.has(currentAsk)
 }
 
-function isResumableState(host: ExtensionHost): boolean {
-	const agentState = host.client.getAgentState()
+function isResumableState(runtime: CliRuntime): boolean {
+	const agentState = runtime.getAgentState()
 	return (
 		agentState.isWaitingForInput &&
 		typeof agentState.currentAsk === "string" &&
@@ -264,11 +264,11 @@ function isResumableState(host: ExtensionHost): boolean {
 	)
 }
 
-async function waitForPostCancelRecovery(host: ExtensionHost): Promise<void> {
+async function waitForPostCancelRecovery(runtime: CliRuntime): Promise<void> {
 	const deadline = Date.now() + CANCEL_RECOVERY_WAIT_TIMEOUT_MS
 
 	while (Date.now() < deadline) {
-		if (isResumableState(host)) {
+		if (isResumableState(runtime)) {
 			return
 		}
 
@@ -277,11 +277,11 @@ async function waitForPostCancelRecovery(host: ExtensionHost): Promise<void> {
 }
 
 async function waitForTaskProgressAfterStdinClosed(
-	host: ExtensionHost,
+	runtime: CliRuntime,
 	getQueueState: () => { hasSeenQueueState: boolean; queueDepth: number },
 ): Promise<void> {
-	while (host.client.hasActiveTask()) {
-		if (!host.isWaitingForInput()) {
+	while (runtime.hasActiveTask()) {
+		if (!runtime.isWaitingForInput()) {
 			await new Promise((resolve) => setTimeout(resolve, STDIN_EOF_POLL_INTERVAL_MS))
 			continue
 		}
@@ -289,15 +289,15 @@ async function waitForTaskProgressAfterStdinClosed(
 		const deadline = Date.now() + STDIN_EOF_RESUME_WAIT_TIMEOUT_MS
 
 		while (Date.now() < deadline) {
-			if (!host.client.hasActiveTask() || !host.isWaitingForInput()) {
+			if (!runtime.hasActiveTask() || !runtime.isWaitingForInput()) {
 				break
 			}
 
 			await new Promise((resolve) => setTimeout(resolve, STDIN_EOF_POLL_INTERVAL_MS))
 		}
 
-		if (host.client.hasActiveTask() && host.isWaitingForInput()) {
-			const currentAsk = host.client.getCurrentAsk()
+		if (runtime.hasActiveTask() && runtime.isWaitingForInput()) {
+			const currentAsk = runtime.getCurrentAsk()
 			const { hasSeenQueueState, queueDepth } = getQueueState()
 
 			// EOF is allowed when the task has reached an idle completion boundary and
@@ -312,12 +312,12 @@ async function waitForTaskProgressAfterStdinClosed(
 				for (let i = 1; i < STDIN_EOF_IDLE_STABLE_POLLS; i++) {
 					await new Promise((resolve) => setTimeout(resolve, STDIN_EOF_POLL_INTERVAL_MS))
 
-					if (!host.client.hasActiveTask() || !host.isWaitingForInput()) {
+					if (!runtime.hasActiveTask() || !runtime.isWaitingForInput()) {
 						isStable = false
 						break
 					}
 
-					const nextAsk = host.client.getCurrentAsk()
+					const nextAsk = runtime.getCurrentAsk()
 					const nextQueueState = getQueueState()
 					if (
 						nextAsk !== currentAsk ||
@@ -339,7 +339,7 @@ async function waitForTaskProgressAfterStdinClosed(
 	}
 }
 
-export async function runStdinStreamMode({ host, jsonEmitter, setStreamRequestId }: StdinStreamModeOptions) {
+export async function runStdinStreamMode({ runtime, jsonEmitter, setStreamRequestId }: StdinStreamModeOptions) {
 	let hasReceivedStdinCommand = false
 	let shouldShutdown = false
 	let activeTaskPromise: Promise<void> | null = null
@@ -402,7 +402,7 @@ export async function runStdinStreamMode({ host, jsonEmitter, setStreamRequestId
 		}
 	}
 
-	const offClientError = host.client.on("error", (error) => {
+	const offClientError = runtime.onError((error) => {
 		if (
 			isExpectedControlFlowError(error, {
 				stdinStreamMode: true,
@@ -566,9 +566,9 @@ export async function runStdinStreamMode({ host, jsonEmitter, setStreamRequestId
 		lastQueueMessageIds = queueMessageIds
 	}
 
-	host.on("extensionWebviewMessage", onExtensionMessage)
+	const offRuntimeMessage = runtime.onMessage(onExtensionMessage)
 
-	const offTaskCompleted = host.client.on("taskCompleted", (event) => {
+	const offTaskCompleted = runtime.onTaskCompleted((event) => {
 		if (activeTaskCommand === "start") {
 			const completionCode = event.success
 				? "task_completed"
@@ -621,11 +621,11 @@ export async function runStdinStreamMode({ host, jsonEmitter, setStreamRequestId
 					// Wait for full settlement to avoid false "task_busy" on immediate next start.
 					// Safe from races: `for await` processes stdin commands serially, so no
 					// concurrent command can mutate state between the check and the await.
-					if (activeTaskPromise && !host.client.hasActiveTask()) {
+					if (activeTaskPromise && !runtime.hasActiveTask()) {
 						await waitForPreviousTaskToSettle()
 					}
 
-					if (activeTaskPromise || host.client.hasActiveTask()) {
+					if (activeTaskPromise || runtime.hasActiveTask()) {
 						jsonEmitter.emitControl({
 							subtype: "error",
 							requestId: stdinCommand.requestId,
@@ -664,7 +664,7 @@ export async function runStdinStreamMode({ host, jsonEmitter, setStreamRequestId
 						...(stdinCommand.configuration ?? {}),
 					}
 
-					activeTaskPromise = host
+					activeTaskPromise = runtime
 						.runTask(stdinCommand.prompt, latestTaskId, taskConfiguration, stdinCommand.images)
 						.catch((error) => {
 							const message = error instanceof Error ? error.message : String(error)
@@ -726,14 +726,17 @@ export async function runStdinStreamMode({ host, jsonEmitter, setStreamRequestId
 					// If cancel was requested, wait briefly for the task to be rehydrated
 					// so message prompts don't race into the pre-cancel task instance.
 					if (awaitingPostCancelRecovery) {
-						await waitForPostCancelRecovery(host)
+						await waitForPostCancelRecovery(runtime)
 					}
 
-					const wasResumable = isResumableState(host)
-					const currentAsk = host.client.getCurrentAsk()
-					const shouldSendAsAskResponse = shouldSendMessageAsAskResponse(host.isWaitingForInput(), currentAsk)
+					const wasResumable = isResumableState(runtime)
+					const currentAsk = runtime.getCurrentAsk()
+					const shouldSendAsAskResponse = shouldSendMessageAsAskResponse(
+						runtime.isWaitingForInput(),
+						currentAsk,
+					)
 
-					if (!host.client.hasActiveTask()) {
+					if (!runtime.hasActiveTask()) {
 						jsonEmitter.emitControl({
 							subtype: "error",
 							requestId: stdinCommand.requestId,
@@ -759,7 +762,7 @@ export async function runStdinStreamMode({ host, jsonEmitter, setStreamRequestId
 
 					if (shouldSendAsAskResponse) {
 						// Match webview behavior: if there is an active ask, route message directly as an ask response.
-						host.sendToExtension({
+						runtime.sendMessage({
 							type: "askResponse",
 							askResponse: "messageResponse",
 							text: stdinCommand.prompt,
@@ -780,13 +783,13 @@ export async function runStdinStreamMode({ host, jsonEmitter, setStreamRequestId
 						break
 					}
 
-					host.sendToExtension({
+					runtime.sendMessage({
 						type: "queueMessage",
 						text: stdinCommand.prompt,
 						images: stdinCommand.images,
 					})
 					pendingQueuedMessageRequestIds.push(stdinCommand.requestId)
-					if (host.isWaitingForInput()) {
+					if (runtime.isWaitingForInput()) {
 						setStreamRequestId(stdinCommand.requestId)
 					}
 
@@ -808,7 +811,7 @@ export async function runStdinStreamMode({ host, jsonEmitter, setStreamRequestId
 					setStreamRequestId(stdinCommand.requestId)
 
 					const hasTaskInFlight = Boolean(
-						activeTaskPromise || activeTaskCommand === "start" || host.client.hasActiveTask(),
+						activeTaskPromise || activeTaskCommand === "start" || runtime.hasActiveTask(),
 					)
 
 					if (!hasTaskInFlight) {
@@ -843,13 +846,13 @@ export async function runStdinStreamMode({ host, jsonEmitter, setStreamRequestId
 						requestId: stdinCommand.requestId,
 						command: "cancel",
 						taskId: latestTaskId,
-						content: host.client.hasActiveTask() ? "cancel requested" : "cancel requested (task starting)",
+						content: runtime.hasActiveTask() ? "cancel requested" : "cancel requested (task starting)",
 						code: "accepted",
 						success: true,
 					})
 
 					try {
-						host.client.cancelTask()
+						runtime.cancelTask()
 
 						jsonEmitter.emitControl({
 							subtype: "done",
@@ -955,15 +958,15 @@ export async function runStdinStreamMode({ host, jsonEmitter, setStreamRequestId
 			throw new Error("no stdin command provided")
 		}
 
-		if (shouldShutdown && host.client.hasActiveTask()) {
-			host.client.cancelTask()
+		if (shouldShutdown && runtime.hasActiveTask()) {
+			runtime.cancelTask()
 		}
 
 		if (!shouldShutdown) {
 			if (activeTaskPromise) {
 				await activeTaskPromise
-			} else if (host.client.hasActiveTask()) {
-				await waitForTaskProgressAfterStdinClosed(host, () => ({
+			} else if (runtime.hasActiveTask()) {
+				await waitForTaskProgressAfterStdinClosed(runtime, () => ({
 					hasSeenQueueState,
 					queueDepth: lastQueueDepth,
 				}))
@@ -971,7 +974,7 @@ export async function runStdinStreamMode({ host, jsonEmitter, setStreamRequestId
 		}
 	} finally {
 		offClientError()
-		host.off("extensionWebviewMessage", onExtensionMessage)
+		offRuntimeMessage()
 		offTaskCompleted()
 	}
 }

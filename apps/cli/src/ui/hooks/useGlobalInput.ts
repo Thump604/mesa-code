@@ -15,7 +15,7 @@ export interface UseGlobalInputOptions {
 	availableModes: ModeResult[]
 	currentMode: string | null
 	mode: string
-	sendToExtension: ((msg: WebviewMessage) => void) | null
+	sendRuntimeMessage: ((msg: WebviewMessage) => void) | null
 	showInfo: (msg: string, duration?: number) => void
 	exit: () => void
 	cleanup: () => Promise<void>
@@ -40,7 +40,7 @@ export function useGlobalInput({
 	availableModes,
 	currentMode,
 	mode,
-	sendToExtension,
+	sendRuntimeMessage,
 	showInfo,
 	exit,
 	cleanup,
@@ -97,8 +97,8 @@ export function useGlobalInput({
 			const nextIndex = currentIndex === -1 ? 0 : (currentIndex + 1) % availableModes.length
 			const nextMode = availableModes[nextIndex]
 
-			if (nextMode && sendToExtension) {
-				sendToExtension({ type: "mode", text: nextMode.slug })
+			if (nextMode && sendRuntimeMessage) {
+				sendRuntimeMessage({ type: "mode", text: nextMode.slug })
 				showInfo(`Switched to ${nextMode.name}`, 2000)
 			}
 
@@ -127,13 +127,13 @@ export function useGlobalInput({
 		}
 
 		// Escape key to cancel/pause task when loading (streaming)
-		if (key.escape && isLoading && sendToExtension) {
+		if (key.escape && isLoading && sendRuntimeMessage) {
 			// If picker is open, let the picker handle escape first
 			if (pickerIsOpen) {
 				return
 			}
 			// Send cancel message to extension (same as webview-ui Cancel button)
-			sendToExtension({ type: "cancelTask" })
+			sendRuntimeMessage({ type: "cancelTask" })
 			return
 		}
 

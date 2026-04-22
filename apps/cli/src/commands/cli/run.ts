@@ -23,6 +23,7 @@ import {
 } from "@/types/index.js"
 import { isValidOutputFormat } from "@/types/json-events.js"
 import { JsonEventEmitter } from "@/agent/json-event-emitter.js"
+import { createCliRuntime, type CliRuntime, type CliRuntimeOptions } from "@/runtime/index.js"
 
 import { createClient } from "@/lib/sdk/index.js"
 import { loadToken, loadSettings } from "@/lib/storage/index.js"
@@ -43,7 +44,6 @@ import { getDefaultExtensionPath } from "@/lib/utils/extension.js"
 import { isValidSessionId } from "@/lib/utils/session-id.js"
 import { VERSION } from "@/lib/utils/version.js"
 
-import { ExtensionHost, ExtensionHostOptions } from "@/agent/index.js"
 import { isExpectedControlFlowError } from "./cancellation.js"
 import { runStdinStreamMode } from "./stdin-stream.js"
 
@@ -88,11 +88,11 @@ function validateProtocolAndRuntime(flagOptions: FlagOptions) {
 	}
 }
 
-async function bootstrapResumeForStdinStream(host: ExtensionHost, sessionId: string): Promise<void> {
-	host.sendToExtension({ type: "showTaskWithId", text: sessionId })
+async function bootstrapResumeForStdinStream(runtime: CliRuntime, sessionId: string): Promise<void> {
+	runtime.sendMessage({ type: "showTaskWithId", text: sessionId })
 
 	// Best-effort wait so early stdin "message" commands can target the resumed task.
-	await pWaitFor(() => host.client.hasActiveTask() || host.isWaitingForInput(), {
+	await pWaitFor(() => runtime.hasActiveTask() || runtime.isWaitingForInput(), {
 		interval: 25,
 		timeout: STREAM_RESUME_WAIT_TIMEOUT_MS,
 	}).catch(() => undefined)
@@ -102,13 +102,14 @@ function normalizeError(error: unknown): Error {
 	return error instanceof Error ? error : new Error(String(error))
 }
 
-async function warmRooModels(host: ExtensionHost): Promise<void> {
+async function warmRooModels(runtime: CliRuntime): Promise<void> {
 	await new Promise<void>((resolve, reject) => {
 		let settled = false
+		let offRuntimeMessage = () => {}
 
 		const cleanup = () => {
 			clearTimeout(timeoutId)
-			host.off("extensionWebviewMessage", onMessage)
+			offRuntimeMessage()
 		}
 
 		const finish = (fn: () => void) => {
@@ -150,8 +151,8 @@ async function warmRooModels(host: ExtensionHost): Promise<void> {
 			finish(() => reject(new Error(`timed out waiting for Roo models after ${ROO_MODEL_WARMUP_TIMEOUT_MS}ms`)))
 		}, ROO_MODEL_WARMUP_TIMEOUT_MS)
 
-		host.on("extensionWebviewMessage", onMessage)
-		host.sendToExtension({ type: "requestRooModels" })
+		offRuntimeMessage = runtime.onMessage(onMessage)
+		runtime.sendMessage({ type: "requestRooModels" })
 	})
 }
 
@@ -278,7 +279,7 @@ export async function run(promptArg: string | undefined, flagOptions: FlagOption
 		}
 	}
 
-	const extensionHostOptions: ExtensionHostOptions = {
+	const runtimeOptions: CliRuntimeOptions = {
 		mode: effectiveMode,
 		reasoningEffort: effectiveReasoningEffort === "unspecified" ? undefined : effectiveReasoningEffort,
 		consecutiveMistakeLimit: effectiveConsecutiveMistakeLimit,
@@ -308,11 +309,11 @@ export async function run(promptArg: string | undefined, flagOptions: FlagOption
 		}
 
 		if (onboardingProviderChoice === OnboardingProviderChoice.Roo) {
-			extensionHostOptions.provider = "roo"
+			runtimeOptions.provider = "roo"
 		}
 	}
 
-	if (extensionHostOptions.provider === "roo") {
+	if (runtimeOptions.provider === "roo") {
 		if (rooToken) {
 			try {
 				const client = createClient({ url: SDK_BASE_URL, authToken: rooToken })
@@ -322,12 +323,12 @@ export async function run(promptArg: string | undefined, flagOptions: FlagOption
 					throw new Error("Invalid token")
 				}
 
-				extensionHostOptions.apiKey = rooToken
-				extensionHostOptions.user = me.user
+				runtimeOptions.apiKey = rooToken
+				runtimeOptions.user = me.user
 			} catch {
 				// If an explicit API key was provided via flag or env var, fall through
 				// to the general API key resolution below instead of exiting.
-				if (!flagOptions.apiKey && !getApiKeyFromEnv(extensionHostOptions.provider)) {
+				if (!flagOptions.apiKey && !getApiKeyFromEnv(runtimeOptions.provider)) {
 					console.error("[CLI] Your Roo compatibility token is not valid.")
 					console.error("[CLI] Please run: roo auth login")
 					console.error(
@@ -345,38 +346,35 @@ export async function run(promptArg: string | undefined, flagOptions: FlagOption
 	// TODO: Validate the API key for the chosen provider.
 	// TODO: Validate the model for the chosen provider.
 
-	if (!isSupportedProvider(extensionHostOptions.provider)) {
+	if (!isSupportedProvider(runtimeOptions.provider)) {
 		console.error(
-			`[CLI] Error: Invalid provider: ${extensionHostOptions.provider}; must be one of: ${supportedProviders.join(", ")}`,
+			`[CLI] Error: Invalid provider: ${runtimeOptions.provider}; must be one of: ${supportedProviders.join(", ")}`,
 		)
 		process.exit(1)
 	}
 
-	extensionHostOptions.apiKey =
-		extensionHostOptions.apiKey ||
+	runtimeOptions.apiKey =
+		runtimeOptions.apiKey ||
 		resolveConfiguredApiKey(
-			extensionHostOptions.provider,
+			runtimeOptions.provider,
 			flagOptions.apiKey,
 			settings,
-			getApiKeyFromEnv(extensionHostOptions.provider),
-			extensionHostOptions.baseUrl,
+			getApiKeyFromEnv(runtimeOptions.provider),
+			runtimeOptions.baseUrl,
 		)
 
-	if (
-		(extensionHostOptions.provider === "openai" || extensionHostOptions.provider === "anthropic") &&
-		!extensionHostOptions.model
-	) {
+	if ((runtimeOptions.provider === "openai" || runtimeOptions.provider === "anthropic") && !runtimeOptions.model) {
 		const providerLabel =
 			effectiveRuntime && flagOptions.provider === undefined && settings.provider === undefined
-				? `${effectiveRuntime} (${extensionHostOptions.provider}-compatible)`
-				: extensionHostOptions.provider
+				? `${effectiveRuntime} (${runtimeOptions.provider}-compatible)`
+				: runtimeOptions.provider
 		console.error(`[CLI] Error: No model provided for ${providerLabel}.`)
 		console.error("[CLI] Use --model or set model defaults in cli-settings.json for your local/private runtime.")
 		process.exit(1)
 	}
 
-	if (!extensionHostOptions.apiKey) {
-		if (extensionHostOptions.provider === "roo") {
+	if (!runtimeOptions.apiKey) {
+		if (runtimeOptions.provider === "roo") {
 			console.error("[CLI] Error: Roo Cloud compatibility authentication failed or was cancelled.")
 			console.error("[CLI] Please run: roo auth login")
 			console.error("[CLI] Or switch to a local/self-hosted provider with --provider/--runtime/--base-url.")
@@ -384,22 +382,20 @@ export async function run(promptArg: string | undefined, flagOptions: FlagOption
 			console.error(
 				`[CLI] Error: No API key provided. Use --api-key or set the appropriate environment variable.`,
 			)
-			console.error(
-				`[CLI] For ${extensionHostOptions.provider}, set ${getEnvVarName(extensionHostOptions.provider)}`,
-			)
+			console.error(`[CLI] For ${runtimeOptions.provider}, set ${getEnvVarName(runtimeOptions.provider)}`)
 		}
 
 		process.exit(1)
 	}
 
-	if (!fs.existsSync(extensionHostOptions.workspacePath)) {
-		console.error(`[CLI] Error: Workspace path does not exist: ${extensionHostOptions.workspacePath}`)
+	if (!fs.existsSync(runtimeOptions.workspacePath)) {
+		console.error(`[CLI] Error: Workspace path does not exist: ${runtimeOptions.workspacePath}`)
 		process.exit(1)
 	}
 
-	if (extensionHostOptions.reasoningEffort && !REASONING_EFFORTS.includes(extensionHostOptions.reasoningEffort)) {
+	if (runtimeOptions.reasoningEffort && !REASONING_EFFORTS.includes(runtimeOptions.reasoningEffort)) {
 		console.error(
-			`[CLI] Error: Invalid reasoning effort: ${extensionHostOptions.reasoningEffort}, must be one of: ${REASONING_EFFORTS.join(", ")}`,
+			`[CLI] Error: Invalid reasoning effort: ${runtimeOptions.reasoningEffort}, must be one of: ${REASONING_EFFORTS.join(", ")}`,
 		)
 		process.exit(1)
 	}
@@ -504,13 +500,13 @@ export async function run(promptArg: string | undefined, flagOptions: FlagOption
 
 			render(
 				createElement(App, {
-					...extensionHostOptions,
+					...runtimeOptions,
 					initialPrompt: prompt,
 					initialTaskId: requestedCreateSessionId,
 					initialSessionId: resolvedResumeSessionId,
 					continueSession: false,
 					version: VERSION,
-					createExtensionHost: (opts: ExtensionHostOptions) => new ExtensionHost(opts),
+					createCliRuntime,
 				}),
 				// Handle Ctrl+C in App component for double-press exit.
 				{ exitOnCtrlC: false },
@@ -528,13 +524,13 @@ export async function run(promptArg: string | undefined, flagOptions: FlagOption
 		const useJsonOutput = outputFormat === "json" || outputFormat === "stream-json"
 		const signalOnlyExit = flagOptions.signalOnlyExit
 
-		extensionHostOptions.disableOutput = useJsonOutput
+		runtimeOptions.disableOutput = useJsonOutput
 
-		const host = new ExtensionHost(extensionHostOptions)
+		const runtime = createCliRuntime(runtimeOptions)
 		let streamRequestId: string | undefined
 		let keepAliveInterval: NodeJS.Timeout | undefined
 		let isShuttingDown = false
-		let hostDisposed = false
+		let runtimeDisposed = false
 
 		const jsonEmitter = useJsonOutput
 			? new JsonEventEmitter({
@@ -594,14 +590,14 @@ export async function run(promptArg: string | undefined, flagOptions: FlagOption
 			keepAliveInterval = setInterval(() => {}, SIGNAL_ONLY_EXIT_KEEPALIVE_MS)
 		}
 
-		const disposeHost = async () => {
-			if (hostDisposed) {
+		const disposeRuntime = async () => {
+			if (runtimeDisposed) {
 				return
 			}
 
-			hostDisposed = true
+			runtimeDisposed = true
 			jsonEmitter?.detach()
-			await host.dispose()
+			await runtime.dispose()
 		}
 
 		const onSigint = () => {
@@ -680,7 +676,7 @@ export async function run(promptArg: string | undefined, flagOptions: FlagOption
 				console.log(`\n[CLI] Received ${signal}, shutting down...`)
 			}
 
-			await disposeHost()
+			await disposeRuntime()
 			if (jsonEmitter) {
 				await jsonEmitter.flush()
 			}
@@ -694,10 +690,10 @@ export async function run(promptArg: string | undefined, flagOptions: FlagOption
 		process.on("unhandledRejection", onUnhandledRejection)
 
 		try {
-			await host.activate()
-			if (extensionHostOptions.provider === "roo") {
+			await runtime.activate()
+			if (runtimeOptions.provider === "roo") {
 				try {
-					await warmRooModels(host)
+					await warmRooModels(runtime)
 				} catch (warmupError) {
 					if (flagOptions.debug) {
 						const message = warmupError instanceof Error ? warmupError.message : String(warmupError)
@@ -707,7 +703,7 @@ export async function run(promptArg: string | undefined, flagOptions: FlagOption
 			}
 
 			if (jsonEmitter) {
-				jsonEmitter.attachToClient(host.client)
+				runtime.attachJsonEmitter(jsonEmitter)
 			}
 
 			if (useStdinPromptStream) {
@@ -716,11 +712,11 @@ export async function run(promptArg: string | undefined, flagOptions: FlagOption
 				}
 
 				if (isResumeRequested) {
-					await bootstrapResumeForStdinStream(host, resolvedResumeSessionId!)
+					await bootstrapResumeForStdinStream(runtime, resolvedResumeSessionId!)
 				}
 
 				await runStdinStreamMode({
-					host,
+					runtime,
 					jsonEmitter,
 					setStreamRequestId: (id) => {
 						streamRequestId = id
@@ -728,13 +724,13 @@ export async function run(promptArg: string | undefined, flagOptions: FlagOption
 				})
 			} else {
 				if (isResumeRequested) {
-					await host.resumeTask(resolvedResumeSessionId!)
+					await runtime.resumeTask(resolvedResumeSessionId!)
 				} else {
-					await host.runTask(prompt!, requestedCreateSessionId)
+					await runtime.runTask(prompt!, requestedCreateSessionId)
 				}
 			}
 
-			await disposeHost()
+			await disposeRuntime()
 			if (jsonEmitter) {
 				await jsonEmitter.flush()
 			}
@@ -751,7 +747,7 @@ export async function run(promptArg: string | undefined, flagOptions: FlagOption
 			process.exit(0)
 		} catch (error) {
 			emitRuntimeError(normalizeError(error))
-			await disposeHost()
+			await disposeRuntime()
 			if (jsonEmitter) {
 				await jsonEmitter.flush()
 			}

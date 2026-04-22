@@ -4,14 +4,13 @@ import { Text, Box } from "ink"
 import type { TokenUsage } from "@roo-code/types"
 
 import { ASCII_ROO } from "@/types/constants.js"
-
-import { ExtensionHostOptions } from "@/agent/index.js"
+import type { CliRuntimeOptions } from "@/runtime/index.js"
 import { useTerminalSize } from "../hooks/TerminalSizeContext.js"
 import * as theme from "../theme.js"
 
 import MetricsDisplay from "./MetricsDisplay.js"
 
-interface HeaderProps extends ExtensionHostOptions {
+interface HeaderProps extends CliRuntimeOptions {
 	version: string
 	tokenUsage?: TokenUsage | null
 	contextWindow?: number
