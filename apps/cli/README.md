@@ -144,6 +144,31 @@ Current smoke coverage:
 - autocomplete picker navigation
 - resume an existing session across a TUI restart
 
+## Non-Interactive Smoke Tests
+
+The CLI also has a live non-interactive smoke lane for the two automation-facing
+surfaces that matter most: `--print` and `--stdin-prompt-stream`.
+It uses the built CLI entry, discovers the live served model from `/v1/models`,
+and verifies real output or stream control completion against the active local
+runtime instead of relying on unit tests alone.
+
+```bash
+pnpm --filter @roo-code/cli test:noninteractive:smoke
+```
+
+List or filter the available cases:
+
+```bash
+pnpm --filter @roo-code/cli test:noninteractive:smoke:list
+python3 apps/cli/scripts/noninteractive/run.py --match stdin
+python3 apps/cli/scripts/noninteractive/run.py --timeout 30
+```
+
+Current smoke coverage:
+
+- live `--print` prompt execution
+- live `--stdin-prompt-stream` start/result/shutdown flow
+
 ## Usage
 
 ### Interactive Mode (Default)

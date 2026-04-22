@@ -16,6 +16,8 @@
 		"test:integration": "tsx scripts/integration/run.ts",
 		"test:tui:smoke": "pnpm build && pnpm build:extension && python3 scripts/tui/run.py",
 		"test:tui:smoke:list": "python3 scripts/tui/run.py --list",
+		"test:noninteractive:smoke": "pnpm build && pnpm build:extension && python3 scripts/noninteractive/run.py",
+		"test:noninteractive:smoke:list": "python3 scripts/noninteractive/run.py --list",
 		"build": "tsup",
 		"build:extension": "pnpm --filter roo-cline bundle",
 		"dev": "tsx src/index.ts",
