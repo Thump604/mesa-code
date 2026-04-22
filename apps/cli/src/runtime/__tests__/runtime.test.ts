@@ -9,40 +9,29 @@ import type { JsonEventEmitter } from "@/agent/json-event-emitter.js"
 import { BundleApiCliRuntime } from "../bundle-runtime.js"
 
 function createRuntimeHarness() {
-	const approveAsk = vi.fn()
-	const denyAsk = vi.fn()
-	const submitUserMessage = vi.fn().mockResolvedValue(undefined)
-	const addQueuedMessage = vi.fn()
 	const startNewTask = vi.fn().mockResolvedValue("task-1")
 	const resumeTask = vi.fn().mockResolvedValue(undefined)
 	const clearCurrentTask = vi.fn().mockResolvedValue(undefined)
 	const cancelCurrentTask = vi.fn().mockResolvedValue(undefined)
+	const sendMessage = vi.fn().mockResolvedValue(undefined)
+	const pressPrimaryButton = vi.fn().mockResolvedValue(undefined)
+	const pressSecondaryButton = vi.fn().mockResolvedValue(undefined)
 	const setConfiguration = vi.fn().mockResolvedValue(undefined)
 	const searchWorkspaceFiles = vi
 		.fn()
 		.mockResolvedValue([{ path: "src/index.ts", type: "file" as const, label: "index.ts" }])
-
-	const currentTask = {
-		taskId: "task-1",
-		clineMessages: [] as ClineMessage[],
-		apiConfiguration: { apiProvider: "openai", openAiModelId: "qwen3-coder" },
-		approveAsk,
-		denyAsk,
-		submitUserMessage,
-		messageQueueService: {
-			addMessage: addQueuedMessage,
-		},
-	}
 
 	const api = new EventEmitter() as EventEmitter & {
 		startNewTask: typeof startNewTask
 		resumeTask: typeof resumeTask
 		clearCurrentTask: typeof clearCurrentTask
 		cancelCurrentTask: typeof cancelCurrentTask
-		sendMessage: (text?: string, images?: string[]) => Promise<void>
+		sendMessage: typeof sendMessage
+		pressPrimaryButton: typeof pressPrimaryButton
+		pressSecondaryButton: typeof pressSecondaryButton
 		getConfiguration: () => { mode: string }
 		setConfiguration: typeof setConfiguration
-		getCurrentTaskStack: () => (typeof currentTask)[]
+		getCurrentTaskStack: () => string[]
 		isTaskInHistory: (taskId: string) => Promise<boolean>
 	}
 
@@ -50,10 +39,12 @@ function createRuntimeHarness() {
 	api.resumeTask = resumeTask
 	api.clearCurrentTask = clearCurrentTask
 	api.cancelCurrentTask = cancelCurrentTask
-	api.sendMessage = vi.fn().mockResolvedValue(undefined)
+	api.sendMessage = sendMessage
+	api.pressPrimaryButton = pressPrimaryButton
+	api.pressSecondaryButton = pressSecondaryButton
 	api.getConfiguration = () => ({ mode: "code" })
 	api.setConfiguration = setConfiguration
-	api.getCurrentTaskStack = () => [currentTask]
+	api.getCurrentTaskStack = () => ["task-1"]
 	api.isTaskInHistory = vi.fn().mockResolvedValue(true)
 
 	const runtime = new BundleApiCliRuntime(
@@ -87,17 +78,15 @@ function createRuntimeHarness() {
 	return {
 		runtime,
 		api,
-		currentTask,
 		startNewTask,
 		resumeTask,
 		clearCurrentTask,
 		cancelCurrentTask,
+		sendMessage,
+		pressPrimaryButton,
+		pressSecondaryButton,
 		setConfiguration,
 		searchWorkspaceFiles,
-		approveAsk,
-		denyAsk,
-		submitUserMessage,
-		addQueuedMessage,
 	}
 }
 
@@ -108,12 +97,11 @@ describe("BundleApiCliRuntime", () => {
 			resumeTask,
 			clearCurrentTask,
 			cancelCurrentTask,
+			sendMessage,
+			pressPrimaryButton,
+			pressSecondaryButton,
 			setConfiguration,
 			searchWorkspaceFiles,
-			approveAsk,
-			denyAsk,
-			submitUserMessage,
-			addQueuedMessage,
 		} = createRuntimeHarness()
 
 		const messages: unknown[] = []
@@ -126,15 +114,18 @@ describe("BundleApiCliRuntime", () => {
 		expect(resumeTask).toHaveBeenCalledWith("task-1")
 
 		runtime.sendTaskMessage("continue", ["image.png"])
-		expect(submitUserMessage).toHaveBeenCalledWith("continue", ["image.png"])
+		await Promise.resolve()
+		expect(sendMessage).toHaveBeenCalledWith("continue", ["image.png"])
 
 		runtime.queueMessage("queued", ["queued.png"])
-		expect(addQueuedMessage).toHaveBeenCalledWith("queued", ["queued.png"])
+		await Promise.resolve()
+		expect(sendMessage).toHaveBeenCalledWith("queued", ["queued.png"])
 
 		runtime.approve()
 		runtime.reject()
-		expect(approveAsk).toHaveBeenCalledOnce()
-		expect(denyAsk).toHaveBeenCalledOnce()
+		await Promise.resolve()
+		expect(pressPrimaryButton).toHaveBeenCalledOnce()
+		expect(pressSecondaryButton).toHaveBeenCalledOnce()
 
 		runtime.setMode("architect")
 		await Promise.resolve()
@@ -220,7 +211,7 @@ describe("BundleApiCliRuntime", () => {
 		vi.useFakeTimers()
 
 		try {
-			const { runtime, currentTask, resumeTask } = createRuntimeHarness()
+			const { runtime, api, resumeTask } = createRuntimeHarness()
 			const restoredMessage = {
 				ts: 42,
 				type: "say",
@@ -232,7 +223,7 @@ describe("BundleApiCliRuntime", () => {
 
 			resumeTask.mockImplementation(async () => {
 				setTimeout(() => {
-					currentTask.clineMessages = [restoredMessage]
+					api.emit("message", { taskId: "task-1", action: "created", message: restoredMessage })
 				}, 100)
 			})
 

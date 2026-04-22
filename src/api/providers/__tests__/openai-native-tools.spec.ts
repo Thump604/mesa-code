@@ -1,4 +1,5 @@
 import OpenAI from "openai"
+import { Anthropic } from "@anthropic-ai/sdk"
 
 import { OpenAiHandler } from "../openai"
 import { OpenAiNativeHandler } from "../openai-native"
@@ -62,6 +63,97 @@ describe("OpenAiHandler native tools", () => {
 					}),
 				]),
 				parallel_tool_calls: true,
+			}),
+			expect.anything(),
+		)
+	})
+
+	it("flattens historical tool blocks for loopback OpenAI-compatible runtimes", async () => {
+		const mockCreate = vi.fn().mockImplementationOnce(() => ({
+			[Symbol.asyncIterator]: async function* () {
+				yield {
+					choices: [{ delta: { content: "Done" } }],
+				}
+			},
+		}))
+
+		const handler = new OpenAiHandler({
+			openAiApiKey: "test-key",
+			openAiBaseUrl: "http://127.0.0.1:8080/v1",
+			openAiModelId: "qwen-local",
+			openAiCustomModelInfo: {
+				maxTokens: 4096,
+				contextWindow: 128000,
+			},
+		} as unknown as ApiHandlerOptions)
+
+		const mockClient = {
+			chat: {
+				completions: {
+					create: mockCreate,
+				},
+			},
+		} as unknown as OpenAI
+		;(handler as unknown as { client: OpenAI }).client = mockClient
+
+		const messages: Anthropic.Messages.MessageParam[] = [
+			{
+				role: "assistant",
+				content: [
+					{
+						type: "text",
+						text: "I'll read that file.",
+					},
+					{
+						type: "tool_use",
+						id: "toolu_123",
+						name: "read_file",
+						input: { path: "config.json" },
+					},
+				],
+			},
+			{
+				role: "user",
+				content: [
+					{
+						type: "tool_result",
+						tool_use_id: "toolu_123",
+						content: "File contents",
+					},
+				],
+			},
+		]
+
+		const stream = handler.createMessage("system", messages, {
+			taskId: "test-task-id",
+			tools: [
+				{
+					type: "function",
+					function: {
+						name: "read_file",
+						description: "read file",
+						parameters: {
+							type: "object",
+							properties: { path: { type: "string" } },
+						},
+					},
+				},
+			],
+		})
+		await stream.next()
+
+		expect(mockCreate).toHaveBeenCalledWith(
+			expect.objectContaining({
+				messages: expect.arrayContaining([
+					expect.objectContaining({
+						role: "assistant",
+						content: "I'll read that file.\n[Tool Use: read_file]\npath: config.json",
+					}),
+					expect.objectContaining({
+						role: "user",
+						content: [{ type: "text", text: "[Tool Result]\nFile contents" }],
+					}),
+				]),
 			}),
 			expect.anything(),
 		)

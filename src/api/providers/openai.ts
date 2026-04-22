@@ -89,6 +89,7 @@ export class OpenAiHandler extends BaseProvider implements SingleCompletionHandl
 		const modelId = this.options.openAiModelId ?? ""
 		const enabledR1Format = this.options.openAiR1FormatEnabled ?? false
 		const isAzureAiInference = this._isAzureAiInference(modelUrl)
+		const flattenToolBlocksToText = this._shouldFlattenHistoricalToolBlocks(modelUrl)
 		const deepseekReasoner = modelId.includes("deepseek-reasoner") || enabledR1Format
 
 		if (modelId.includes("o1") || modelId.includes("o3") || modelId.includes("o4")) {
@@ -121,7 +122,12 @@ export class OpenAiHandler extends BaseProvider implements SingleCompletionHandl
 					}
 				}
 
-				convertedMessages = [systemMessage, ...convertToOpenAiMessages(messages)]
+				convertedMessages = [
+					systemMessage,
+					...convertToOpenAiMessages(messages, {
+						flattenToolBlocksToText,
+					}),
+				]
 
 				if (modelInfo.supportsPromptCache) {
 					// Note: the following logic is copied from openrouter:
@@ -225,7 +231,12 @@ export class OpenAiHandler extends BaseProvider implements SingleCompletionHandl
 				model: modelId,
 				messages: deepseekReasoner
 					? convertToR1Format([{ role: "user", content: systemPrompt }, ...messages])
-					: [systemMessage, ...convertToOpenAiMessages(messages)],
+					: [
+							systemMessage,
+							...convertToOpenAiMessages(messages, {
+								flattenToolBlocksToText,
+							}),
+						],
 				// Tools are always present (minimum ALWAYS_AVAILABLE_TOOLS)
 				tools: this.convertToolsForOpenAI(metadata?.tools),
 				tool_choice: metadata?.tool_choice,
@@ -334,6 +345,7 @@ export class OpenAiHandler extends BaseProvider implements SingleCompletionHandl
 	): ApiStream {
 		const modelInfo = this.getModel().info
 		const methodIsAzureAiInference = this._isAzureAiInference(this.options.openAiBaseUrl)
+		const flattenToolBlocksToText = this._shouldFlattenHistoricalToolBlocks(this.options.openAiBaseUrl)
 
 		if (this.options.openAiStreamingEnabled ?? true) {
 			const isGrokXAI = this._isGrokXAI(this.options.openAiBaseUrl)
@@ -345,7 +357,9 @@ export class OpenAiHandler extends BaseProvider implements SingleCompletionHandl
 						role: "developer",
 						content: `Formatting re-enabled\n${systemPrompt}`,
 					},
-					...convertToOpenAiMessages(messages),
+					...convertToOpenAiMessages(messages, {
+						flattenToolBlocksToText,
+					}),
 				],
 				stream: true,
 				...(isGrokXAI ? {} : { stream_options: { include_usage: true } }),
@@ -381,7 +395,9 @@ export class OpenAiHandler extends BaseProvider implements SingleCompletionHandl
 						role: "developer",
 						content: `Formatting re-enabled\n${systemPrompt}`,
 					},
-					...convertToOpenAiMessages(messages),
+					...convertToOpenAiMessages(messages, {
+						flattenToolBlocksToText,
+					}),
 				],
 				reasoning_effort: modelInfo.reasoningEffort as "low" | "medium" | "high" | undefined,
 				temperature: undefined,
@@ -507,6 +523,15 @@ export class OpenAiHandler extends BaseProvider implements SingleCompletionHandl
 	private _isGrokXAI(baseUrl?: string): boolean {
 		const urlHost = this._getUrlHost(baseUrl)
 		return urlHost.includes("x.ai")
+	}
+
+	private _shouldFlattenHistoricalToolBlocks(baseUrl?: string): boolean {
+		try {
+			const hostname = new URL(baseUrl ?? "").hostname
+			return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1"
+		} catch (error) {
+			return false
+		}
 	}
 
 	protected _isAzureAiInference(baseUrl?: string): boolean {

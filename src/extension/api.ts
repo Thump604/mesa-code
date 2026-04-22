@@ -287,10 +287,34 @@ export class API extends EventEmitter<RooCodeEvents> implements RooCodeAPI {
 	}
 
 	public async pressPrimaryButton() {
+		const currentTask = this.sidebarProvider.getCurrentTask()
+
+		if (currentTask) {
+			currentTask.approveAsk()
+			return
+		}
+
+		if (!this.sidebarProvider.viewLaunched) {
+			this.log("[API#pressPrimaryButton] no current task in headless mode; approval dropped")
+			return
+		}
+
 		await this.sidebarProvider.postMessageToWebview({ type: "invoke", invoke: "primaryButtonClick" })
 	}
 
 	public async pressSecondaryButton() {
+		const currentTask = this.sidebarProvider.getCurrentTask()
+
+		if (currentTask) {
+			currentTask.denyAsk()
+			return
+		}
+
+		if (!this.sidebarProvider.viewLaunched) {
+			this.log("[API#pressSecondaryButton] no current task in headless mode; rejection dropped")
+			return
+		}
+
 		await this.sidebarProvider.postMessageToWebview({ type: "invoke", invoke: "secondaryButtonClick" })
 	}
 

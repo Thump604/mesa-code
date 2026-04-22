@@ -601,6 +601,78 @@ describe("convertToOpenAiMessages", () => {
 		})
 	})
 
+	describe("flattenToolBlocksToText option", () => {
+		it("should convert assistant tool_use blocks into assistant text content", () => {
+			const anthropicMessages: Anthropic.Messages.MessageParam[] = [
+				{
+					role: "assistant",
+					content: [
+						{
+							type: "text",
+							text: "I'll read that file.",
+						},
+						{
+							type: "tool_use",
+							id: "toolu_123",
+							name: "read_file",
+							input: { path: "config.json" },
+						},
+					],
+				},
+			]
+
+			const openAiMessages = convertToOpenAiMessages(anthropicMessages, {
+				flattenToolBlocksToText: true,
+			})
+
+			expect(openAiMessages).toEqual([
+				{
+					role: "assistant",
+					content: "I'll read that file.\n[Tool Use: read_file]\npath: config.json",
+				},
+			])
+		})
+
+		it("should convert tool_result blocks into user text content instead of tool messages", () => {
+			const anthropicMessages: Anthropic.Messages.MessageParam[] = [
+				{
+					role: "user",
+					content: [
+						{
+							type: "tool_result",
+							tool_use_id: "toolu_123",
+							content: "File contents",
+						},
+						{
+							type: "text",
+							text: "<environment_details>cwd=/repo</environment_details>",
+						},
+					],
+				},
+			]
+
+			const openAiMessages = convertToOpenAiMessages(anthropicMessages, {
+				flattenToolBlocksToText: true,
+			})
+
+			expect(openAiMessages).toEqual([
+				{
+					role: "user",
+					content: [
+						{
+							type: "text",
+							text: "[Tool Result]\nFile contents",
+						},
+						{
+							type: "text",
+							text: "<environment_details>cwd=/repo</environment_details>",
+						},
+					],
+				},
+			])
+		})
+	})
+
 	describe("reasoning_details transformation", () => {
 		it("should preserve reasoning_details when assistant content is a string", () => {
 			const anthropicMessages = [

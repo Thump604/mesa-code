@@ -284,9 +284,10 @@ def case_approval_flow_live(context: SmokeContext) -> None:
         ) as session:
             session.wait_for_text("Roo Code CLI v0.1.17", 15)
             session.submit_prompt("Use read_file to read AGENTS.md and reply with its first line only.")
-            session.wait_for_text("Press Y to approve, N to reject", 120)
+            session.wait_for_text("readFile", 120, "tool approval request")
+            session.wait_for_text("Press Y to approve, N to reject", 15)
             session.press_y()
-            session.wait_for_text("Esc to cancel", 30)
+            session.wait_for_assistant_reply("# AGENTS.md", 120, "post-approval assistant reply")
 
 
 def case_autocomplete_picker_navigation(context: SmokeContext) -> None:

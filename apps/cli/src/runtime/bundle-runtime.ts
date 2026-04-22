@@ -46,19 +46,6 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 type RuntimeMessageListener = (message: ExtensionMessage) => void
 type RuntimeErrorListener = (error: Error) => void
 
-type RuntimeTask = {
-	taskId: string
-	clineMessages?: ClineMessage[]
-	taskAsk?: ClineMessage
-	apiConfiguration?: Record<string, unknown>
-	approveAsk?(options?: { text?: string; images?: string[] }): void
-	denyAsk?(options?: { text?: string; images?: string[] }): void
-	submitUserMessage?(text: string, images?: string[]): Promise<void>
-	messageQueueService?: {
-		addMessage(text: string, images?: string[]): void
-	}
-}
-
 type BundleApi = EventEmitter & {
 	startNewTask(options: {
 		configuration: RooCodeSettings
@@ -70,9 +57,11 @@ type BundleApi = EventEmitter & {
 	clearCurrentTask(lastMessage?: string): Promise<void>
 	cancelCurrentTask(): Promise<void>
 	sendMessage(text?: string, images?: string[]): Promise<void>
+	pressPrimaryButton(): Promise<void>
+	pressSecondaryButton(): Promise<void>
 	getConfiguration(): RooCodeSettings
 	setConfiguration(values: RooCodeSettings): Promise<void>
-	getCurrentTaskStack(): RuntimeTask[]
+	getCurrentTaskStack(): string[]
 	isTaskInHistory(taskId: string): Promise<boolean>
 }
 
@@ -437,6 +426,12 @@ export class BundleApiCliRuntime implements CliRuntime {
 		})
 
 		this.client.on("waitingForInput", (event) => {
+			if (this.options.disableOutput) {
+				this.upsertCurrentMessage(event.message)
+				void this.publishState({ includeMessages: true, includeTaskHistory: false })
+				return
+			}
+
 			void this.askDispatcher.handleAsk(event.message)
 		})
 
@@ -454,17 +449,12 @@ export class BundleApiCliRuntime implements CliRuntime {
 				this.currentTaskId = taskId
 
 				if (action === "created") {
-					const existingIndex = this.currentMessages.findIndex((entry) => entry.ts === message.ts)
-					if (existingIndex >= 0) {
-						this.currentMessages[existingIndex] = message
-					} else {
-						this.currentMessages = [...this.currentMessages, message]
-					}
+					this.upsertCurrentMessage(message)
 					void this.publishState({ includeMessages: true, includeTaskHistory: false })
 					return
 				}
 
-				this.currentMessages = this.currentMessages.map((entry) => (entry.ts === message.ts ? message : entry))
+				this.upsertCurrentMessage(message)
 				this.handleRuntimeMessage({ type: "messageUpdated", clineMessage: message } as ExtensionMessage)
 			},
 		)
@@ -610,13 +600,7 @@ export class BundleApiCliRuntime implements CliRuntime {
 		}
 
 		if (includeMessages) {
-			const currentTask = this.getCurrentTask()
-			if (currentTask) {
-				this.currentTaskId = currentTask.taskId
-				if (Array.isArray(currentTask.clineMessages) && currentTask.clineMessages.length > 0) {
-					this.currentMessages = [...currentTask.clineMessages]
-				}
-			}
+			this.currentTaskId = api.getCurrentTaskStack().at(-1) ?? this.currentTaskId
 			state.clineMessages = this.currentMessages
 		}
 
@@ -628,20 +612,27 @@ export class BundleApiCliRuntime implements CliRuntime {
 		this.handleRuntimeMessage({ type: "state", state } as ExtensionMessage)
 	}
 
-	private getCurrentTask(): RuntimeTask | undefined {
-		return this.api?.getCurrentTaskStack().at(-1)
+	private upsertCurrentMessage(message: ClineMessage): void {
+		const existingIndex = this.currentMessages.findIndex((entry) => entry.ts === message.ts)
+		if (existingIndex >= 0) {
+			this.currentMessages[existingIndex] = message
+			return
+		}
+
+		this.currentMessages = [...this.currentMessages, message]
 	}
 
 	private async waitForTaskHistoryHydration(taskId: string, timeoutMs = 5_000): Promise<void> {
 		const startedAt = Date.now()
 
 		while (Date.now() - startedAt < timeoutMs) {
-			const currentTask = this.getCurrentTask()
-			if (
-				currentTask?.taskId === taskId &&
-				Array.isArray(currentTask.clineMessages) &&
-				currentTask.clineMessages.length > 0
-			) {
+			if (this.currentTaskId === taskId && this.currentMessages.length > 0) {
+				return
+			}
+
+			const persistedMessages = await this.readPersistedTaskMessages(taskId)
+			if (persistedMessages?.length) {
+				this.currentMessages = [...persistedMessages]
 				return
 			}
 
@@ -670,12 +661,11 @@ export class BundleApiCliRuntime implements CliRuntime {
 	}
 
 	private getCurrentApiConfiguration(): Record<string, unknown> {
-		return (
-			this.getCurrentTask()?.apiConfiguration ||
-			getProviderSettings(this.options.provider, this.options.apiKey, this.options.model, {
-				baseUrl: this.options.baseUrl,
-			})
-		)
+		return this.api?.getConfiguration()
+			? { ...this.api.getConfiguration() }
+			: getProviderSettings(this.options.provider, this.options.apiKey, this.options.model, {
+					baseUrl: this.options.baseUrl,
+				})
 	}
 
 	private async handleWebviewMessage(message: WebviewMessage): Promise<void> {
@@ -697,23 +687,18 @@ export class BundleApiCliRuntime implements CliRuntime {
 				return
 			}
 			case "askResponse": {
-				const currentTask = this.getCurrentTask()
-				if (!currentTask) {
-					return
-				}
-
 				if (message.askResponse === "messageResponse") {
-					await currentTask.submitUserMessage?.(message.text || "", message.images)
+					await api.sendMessage(message.text || "", message.images)
 					return
 				}
 
 				if (message.askResponse === "yesButtonClicked") {
-					currentTask.approveAsk?.({ text: message.text, images: message.images })
+					await api.pressPrimaryButton()
 					return
 				}
 
 				if (message.askResponse === "noButtonClicked") {
-					currentTask.denyAsk?.({ text: message.text, images: message.images })
+					await api.pressSecondaryButton()
 				}
 				return
 			}
@@ -729,7 +714,7 @@ export class BundleApiCliRuntime implements CliRuntime {
 				return
 			}
 			case "queueMessage": {
-				this.getCurrentTask()?.messageQueueService?.addMessage(message.text || "", message.images)
+				await api.sendMessage(message.text || "", message.images)
 				return
 			}
 			case "mode": {
@@ -752,8 +737,7 @@ export class BundleApiCliRuntime implements CliRuntime {
 				await api.resumeTask(message.text)
 				this.currentTaskId = message.text
 				await this.waitForTaskHistoryHydration(message.text)
-				const currentTask = this.getCurrentTask()
-				if (!Array.isArray(currentTask?.clineMessages) || currentTask.clineMessages.length === 0) {
+				if (this.currentMessages.length === 0) {
 					const persistedMessages = await this.readPersistedTaskMessages(message.text)
 					if (persistedMessages?.length) {
 						this.currentMessages = [...persistedMessages]

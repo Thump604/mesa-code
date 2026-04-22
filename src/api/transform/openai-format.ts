@@ -271,6 +271,77 @@ export interface ConvertToOpenAiMessagesOptions {
 	 * reasoning_content. Default is false for backward compatibility.
 	 */
 	mergeToolResultText?: boolean
+	/**
+	 * If true, convert historical tool_use and tool_result blocks into plain text
+	 * before mapping to OpenAI chat-completions messages. This is a compatibility
+	 * fallback for local OpenAI-compatible runtimes that accept current tool
+	 * definitions but fail when prior assistant tool_calls / role:tool history is
+	 * replayed on the next request.
+	 */
+	flattenToolBlocksToText?: boolean
+}
+
+function toolUseToText(block: Anthropic.Messages.ToolUseBlockParam): string {
+	let input: string
+	if (typeof block.input === "object" && block.input !== null) {
+		input = Object.entries(block.input)
+			.map(([key, value]) => {
+				const formattedValue =
+					typeof value === "object" && value !== null ? JSON.stringify(value, null, 2) : String(value)
+				return `${key}: ${formattedValue}`
+			})
+			.join("\n")
+	} else {
+		input = String(block.input)
+	}
+	return `[Tool Use: ${block.name}]\n${input}`
+}
+
+function toolResultToText(block: Anthropic.Messages.ToolResultBlockParam): string {
+	const errorSuffix = block.is_error ? " (Error)" : ""
+	if (typeof block.content === "string") {
+		return `[Tool Result${errorSuffix}]\n${block.content}`
+	}
+	if (Array.isArray(block.content)) {
+		const contentText = block.content
+			.map((contentBlock) => {
+				if (contentBlock.type === "text") {
+					return contentBlock.text
+				}
+				if (contentBlock.type === "image") {
+					return "[Image]"
+				}
+				return `[${(contentBlock as { type: string }).type}]`
+			})
+			.join("\n")
+		return `[Tool Result${errorSuffix}]\n${contentText}`
+	}
+	return `[Tool Result${errorSuffix}]`
+}
+
+function flattenToolBlocksInMessage(message: Anthropic.Messages.MessageParam): Anthropic.Messages.MessageParam {
+	if (typeof message.content === "string") {
+		return message
+	}
+
+	return {
+		...message,
+		content: message.content.map((block) => {
+			if (block.type === "tool_use") {
+				return {
+					type: "text" as const,
+					text: toolUseToText(block),
+				}
+			}
+			if (block.type === "tool_result") {
+				return {
+					type: "text" as const,
+					text: toolResultToText(block),
+				}
+			}
+			return block
+		}),
+	}
 }
 
 export function convertToOpenAiMessages(
@@ -278,6 +349,9 @@ export function convertToOpenAiMessages(
 	options?: ConvertToOpenAiMessagesOptions,
 ): OpenAI.Chat.ChatCompletionMessageParam[] {
 	const openAiMessages: OpenAI.Chat.ChatCompletionMessageParam[] = []
+	const messages = options?.flattenToolBlocksToText
+		? anthropicMessages.map((message) => flattenToolBlocksInMessage(message))
+		: anthropicMessages
 
 	const mapReasoningDetails = (details: unknown): any[] | undefined => {
 		if (!Array.isArray(details)) {
@@ -300,7 +374,7 @@ export function convertToOpenAiMessages(
 	// Use provided normalization function or identity function
 	const normalizeId = options?.normalizeToolCallId ?? ((id: string) => id)
 
-	for (const anthropicMessage of anthropicMessages) {
+	for (const anthropicMessage of messages) {
 		if (typeof anthropicMessage.content === "string") {
 			// Some upstream transforms (e.g. [`Task.buildCleanConversationHistory()`](src/core/task/Task.ts:4048))
 			// will convert a single text block into a string for compactness.

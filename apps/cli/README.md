@@ -131,7 +131,7 @@ Current smoke coverage:
 
 - launch and render
 - live prompt submission
-- approval-required prompt handling
+- approval-required tool execution to completion
 - autocomplete picker navigation
 - resume an existing session across a TUI restart
 
