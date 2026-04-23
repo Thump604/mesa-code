@@ -7,6 +7,8 @@ import type { TaskCompletedEvent } from "@/agent/events.js"
 import type { CliSessionController } from "@/runtime/index.js"
 import { isRecord } from "@/lib/utils/guards.js"
 
+import { shouldRouteAsAskResponse } from "@/agent/approval-adapter.js"
+
 import { isCancellationLikeError, isExpectedControlFlowError, isNoActiveTaskLikeError } from "./cancellation.js"
 
 const RESUME_ASKS = new Set(["resume_task", "resume_completed_task"])
@@ -16,16 +18,6 @@ const STDIN_EOF_RESUME_WAIT_TIMEOUT_MS = 2_000
 const STDIN_EOF_POLL_INTERVAL_MS = 100
 const STDIN_EOF_IDLE_ASKS = new Set(["completion_result", "resume_completed_task"])
 const STDIN_EOF_IDLE_STABLE_POLLS = 2
-const MESSAGE_AS_ASK_RESPONSE_ASKS = new Set([
-	"followup",
-	"tool",
-	"command",
-	"use_mcp_server",
-	"completion_result",
-	"resume_task",
-	"resume_completed_task",
-	"mistake_limit_reached",
-])
 
 interface StreamQueueItem {
 	id: string
@@ -41,8 +33,12 @@ export interface StdinStreamSessionOptions {
 	isShuttingDown: () => boolean
 }
 
+/**
+ * @deprecated Use shouldRouteAsAskResponse from approval-adapter.ts directly.
+ * Kept for backward compatibility with existing imports.
+ */
 export function shouldSendMessageAsAskResponse(waitingForInput: boolean, currentAsk: string | undefined): boolean {
-	return waitingForInput && typeof currentAsk === "string" && MESSAGE_AS_ASK_RESPONSE_ASKS.has(currentAsk)
+	return shouldRouteAsAskResponse(waitingForInput, currentAsk as import("@roo-code/types").ClineAsk | undefined)
 }
 
 function normalizeQueueText(text: string | undefined): string | undefined {
@@ -428,7 +424,7 @@ export class StdinStreamSession {
 
 		const wasResumable = this.isResumableState()
 		const currentAsk = this.options.sessionController.getCurrentAsk()
-		const shouldSendAsResponse = shouldSendMessageAsAskResponse(
+		const shouldSendAsResponse = shouldRouteAsAskResponse(
 			this.options.sessionController.isWaitingForInput(),
 			currentAsk,
 		)

@@ -232,6 +232,8 @@ describe("shouldSendMessageAsAskResponse", () => {
 		"resume_task",
 		"resume_completed_task",
 		"mistake_limit_reached",
+		"api_req_failed",
+		"auto_approval_max_req_reached",
 	])("routes %s asks as ask responses", (ask) => {
 		expect(shouldSendMessageAsAskResponse(true, ask)).toBe(true)
 	})
