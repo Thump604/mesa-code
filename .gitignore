@@ -18,6 +18,17 @@ mock/
 .cursor/
 .windsurf/
 .roo/
+AGENTS.md
+CLAUDE.md
+HANDOVER.md
+GUIDE.md
+*.local.md
+docs/internal/
+docs/private/
+docs/*private*
+FORK_ROADMAP.md
+RUNTIME_REQUESTS.md
+RUNTIME_CONTROL_PLANE_GAP_ANALYSIS.md
 
 # IDEs
 .idea
