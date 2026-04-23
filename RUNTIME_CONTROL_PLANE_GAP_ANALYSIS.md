@@ -335,14 +335,20 @@ The smallest useful production contract is not a rewrite. It is:
 
 ### Roo
 
-- add an ops-backed runtime adapter
-- prefer preset-based selection over raw model-ID selection when ops is present
-- treat the current managed detached runtime path as fallback/bootstrap
+- ~~add an ops-backed runtime adapter~~ **Done (2026-04-23)**
+- ~~prefer preset-based selection over raw model-ID selection when ops is present~~ **Done (2026-04-23)**
+- ~~treat the current managed detached runtime path as fallback/bootstrap~~ **Done (2026-04-23)**
+
+Implementation:
+
+- `apps/cli/src/lib/ops-control-plane.ts` — typed readiness client (`getOpsReadiness`, `pollOpsReadiness`) consuming `GET /runtime/readiness`
+- `apps/cli/src/commands/cli/use.ts` — preset activation polls readiness until `--wait-seconds` expires; returns `ready` only when `readiness.ready && preset.active === requested && model_id matches`; bare preset aliases fail closed when ops is absent
+- Branch: `codex/local-private-roadmap`
 
 ### Ops
 
 - keep `/presets` and `/presets/active` as first-class
-- add one consolidated runtime status/readiness endpoint
+- ~~add one consolidated runtime status/readiness endpoint~~ **Done (2026-04-23)** — `GET /runtime/readiness` on `:8001`
 - make preset activation return structured operation state
 - expose model acquisition and storage-planning APIs
 
@@ -354,11 +360,11 @@ The smallest useful production contract is not a rewrite. It is:
 
 ## Suggested Immediate Work Order
 
-### Phase 1
+### Phase 1 — **Implemented**
 
-- Roo: add an ops control-plane adapter for `roo use`
-- Ops: add a consolidated runtime status/readiness payload
-- Runtime: restore a stable `/metrics` surface and add `/ready`
+- ~~Roo: add an ops control-plane adapter for `roo use`~~ **Done (2026-04-23)**
+- ~~Ops: add a consolidated runtime status/readiness payload~~ **Done (2026-04-23)**
+- Runtime: restore a stable `/metrics` surface and add `/ready` — **Runtime-owned, not yet delivered**
 
 ### Phase 2
 

@@ -30,6 +30,37 @@ export type OpsActivatePresetResponse = {
 	swap?: Record<string, unknown>
 }
 
+export type OpsReadinessPreset = {
+	active: string | null
+	display_name: string | null
+	model_id: string | null
+	service_presets: string[]
+	resident_models: string[]
+}
+
+export type OpsReadinessResponse = {
+	ready: boolean
+	reason: string | null
+	preset: OpsReadinessPreset
+	backend: string | null
+	process: {
+		online: boolean
+		status: string | null
+		model_name: string | null
+		uptime_s: number | null
+	}
+	resources: {
+		metal_active_gb: number | null
+		metal_peak_gb: number | null
+	}
+	queue: {
+		running: number
+		waiting: number
+	}
+	hold: Record<string, unknown> | null
+	health_llm: Record<string, unknown> | null
+}
+
 type OpsControlPlaneDeps = {
 	fetch?: typeof fetch
 }
@@ -117,6 +148,73 @@ export async function activateOpsPreset(
 		},
 		deps,
 	)
+}
+
+export async function getOpsReadiness(
+	baseUrl = DEFAULT_OPS_BASE_URL,
+	deps: OpsControlPlaneDeps = {},
+): Promise<OpsReadinessResponse> {
+	return fetchOpsJson<OpsReadinessResponse>(baseUrl, "/runtime/readiness", undefined, deps)
+}
+
+export async function pollOpsReadiness(
+	baseUrl: string,
+	options: {
+		presetId: string
+		expectedModelId?: string | null
+		waitSeconds: number
+		intervalMs?: number
+	},
+	deps: OpsControlPlaneDeps = {},
+): Promise<OpsReadinessResponse> {
+	const { presetId, expectedModelId, waitSeconds, intervalMs = 2_000 } = options
+	const deadline = Date.now() + waitSeconds * 1_000
+	let last: OpsReadinessResponse | undefined
+
+	while (Date.now() < deadline) {
+		try {
+			last = await getOpsReadiness(baseUrl, deps)
+			if (
+				last.ready &&
+				last.preset.active === presetId &&
+				(!expectedModelId || last.preset.model_id === expectedModelId)
+			) {
+				return last
+			}
+		} catch {
+			// Ops may be briefly unavailable during model swap
+		}
+
+		const remaining = deadline - Date.now()
+		if (remaining <= 0) break
+		await new Promise<void>((r) => setTimeout(r, Math.min(intervalMs, remaining)))
+	}
+
+	if (!last) {
+		try {
+			last = await getOpsReadiness(baseUrl, deps)
+		} catch {
+			return {
+				ready: false,
+				reason: "Ops control plane unreachable after polling timeout.",
+				preset: {
+					active: null,
+					display_name: null,
+					model_id: null,
+					service_presets: [],
+					resident_models: [],
+				},
+				backend: null,
+				process: { online: false, status: null, model_name: null, uptime_s: null },
+				resources: { metal_active_gb: null, metal_peak_gb: null },
+				queue: { running: 0, waiting: 0 },
+				hold: null,
+				health_llm: null,
+			}
+		}
+	}
+
+	return last
 }
 
 export function buildOpsControlPlaneSettingsPatch(options: {

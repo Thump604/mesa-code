@@ -121,10 +121,22 @@ describe("useRuntime", () => {
 			activated: "fast-qwen",
 			model_id: "qwen3.5-35b-a3b",
 		})
-		const getOpsModeContract = vi.fn().mockResolvedValue({
-			active_preset: "fast-qwen",
-			active_preset_display_name: "Fast Qwen (MoE)",
-			active_model_id: "qwen3.5-35b-a3b",
+		const pollOpsReadiness = vi.fn().mockResolvedValue({
+			ready: true,
+			reason: null,
+			preset: {
+				active: "fast-qwen",
+				display_name: "Fast Qwen (MoE)",
+				model_id: "qwen3.5-35b-a3b",
+				service_presets: [],
+				resident_models: [],
+			},
+			backend: "vllm-mlx",
+			process: { online: true, status: "healthy", model_name: "qwen3.5-35b-a3b", uptime_s: 120 },
+			resources: { metal_active_gb: null, metal_peak_gb: null },
+			queue: { running: 0, waiting: 0 },
+			hold: null,
+			health_llm: null,
 		})
 		const isOpsControlPlaneAvailable = vi.fn().mockResolvedValue(true)
 		const listOpsModelPresets = vi.fn().mockResolvedValue([
@@ -142,7 +154,7 @@ describe("useRuntime", () => {
 				{
 					activateManagedRuntime,
 					activateOpsPreset,
-					getOpsModeContract,
+					pollOpsReadiness,
 					isOpsControlPlaneAvailable,
 					listOpsModelPresets,
 					saveSettings,
@@ -152,6 +164,13 @@ describe("useRuntime", () => {
 
 		expect(activateManagedRuntime).not.toHaveBeenCalled()
 		expect(activateOpsPreset).toHaveBeenCalledWith("http://127.0.0.1:8001", "fast-qwen")
+		expect(pollOpsReadiness).toHaveBeenCalledWith(
+			"http://127.0.0.1:8001",
+			expect.objectContaining({
+				presetId: "fast-qwen",
+				expectedModelId: "qwen3.5-35b-a3b",
+			}),
+		)
 		expect(saveSettings).toHaveBeenCalledWith(
 			expect.objectContaining({
 				controlPlane: "ops",
@@ -167,7 +186,149 @@ describe("useRuntime", () => {
 		)
 		expect(output).toContain("Control Plane: ops (http://127.0.0.1:8001)")
 		expect(output).toContain("Active preset: Fast Qwen (MoE)")
+		expect(output).toContain("State: ready")
+	})
+
+	it("returns starting when readiness preset does not match requested", async () => {
+		const activateOpsPreset = vi.fn().mockResolvedValue({
+			activated: "fast-qwen",
+			model_id: "qwen3.5-35b-a3b",
+		})
+		const pollOpsReadiness = vi.fn().mockResolvedValue({
+			ready: true,
+			reason: null,
+			preset: {
+				active: "coding-quality",
+				display_name: "Coding (Quality)",
+				model_id: "qwen3.6-27b",
+				service_presets: [],
+				resident_models: [],
+			},
+			backend: "vllm-mlx",
+			process: { online: true, status: "healthy", model_name: "qwen3.6-27b", uptime_s: 60 },
+			resources: { metal_active_gb: null, metal_peak_gb: null },
+			queue: { running: 0, waiting: 0 },
+			hold: null,
+			health_llm: null,
+		})
+		const isOpsControlPlaneAvailable = vi.fn().mockResolvedValue(true)
+		const listOpsModelPresets = vi
+			.fn()
+			.mockResolvedValue([{ id: "fast-qwen", display_name: "Fast Qwen (MoE)", model_id: "qwen3.5-35b-a3b" }])
+
+		const output = await captureStdout(() =>
+			useRuntime(
+				"fast-qwen",
+				{},
+				{
+					activateOpsPreset,
+					pollOpsReadiness,
+					isOpsControlPlaneAvailable,
+					listOpsModelPresets,
+					saveSettings,
+				},
+			),
+		)
+
 		expect(output).toContain("State: starting")
+		expect(output).not.toContain("State: ready")
+	})
+
+	it("includes readiness reason when runtime is not ready", async () => {
+		const activateOpsPreset = vi.fn().mockResolvedValue({
+			activated: "fast-qwen",
+			model_id: "qwen3.5-35b-a3b",
+		})
+		const pollOpsReadiness = vi.fn().mockResolvedValue({
+			ready: false,
+			reason: "llm-server status: down",
+			preset: {
+				active: "fast-qwen",
+				display_name: "Fast Qwen (MoE)",
+				model_id: null,
+				service_presets: [],
+				resident_models: [],
+			},
+			backend: "vllm-mlx",
+			process: { online: false, status: null, model_name: null, uptime_s: null },
+			resources: { metal_active_gb: null, metal_peak_gb: null },
+			queue: { running: 0, waiting: 0 },
+			hold: null,
+			health_llm: null,
+		})
+		const isOpsControlPlaneAvailable = vi.fn().mockResolvedValue(true)
+		const listOpsModelPresets = vi
+			.fn()
+			.mockResolvedValue([{ id: "fast-qwen", display_name: "Fast Qwen (MoE)", model_id: "qwen3.5-35b-a3b" }])
+
+		const output = await captureStdout(() =>
+			useRuntime(
+				"fast-qwen",
+				{},
+				{
+					activateOpsPreset,
+					pollOpsReadiness,
+					isOpsControlPlaneAvailable,
+					listOpsModelPresets,
+					saveSettings,
+				},
+			),
+		)
+
+		expect(output).toContain("State: starting")
+		expect(output).toContain("Runtime is not ready: llm-server status: down")
+	})
+
+	it("fails closed when bare preset alias is used without ops", async () => {
+		const isOpsControlPlaneAvailable = vi.fn().mockResolvedValue(false)
+
+		await expect(useRuntime("fast-qwen", {}, { isOpsControlPlaneAvailable })).rejects.toThrow(
+			"Ops control plane is required to resolve preset aliases",
+		)
+	})
+
+	it("allows explicit --model for direct runtime bootstrap without ops", async () => {
+		const isOpsControlPlaneAvailable = vi.fn().mockResolvedValue(false)
+		const activateManagedRuntime = vi.fn().mockResolvedValue({
+			runtime: "vllm-mlx",
+			protocol: "openai",
+			provider: "openai",
+			baseUrl: "http://127.0.0.1:8080/v1",
+			model: "Qwen/Qwen3.6-35B-A3B",
+			state: "starting",
+			controlPlane: {
+				kind: "direct-runtime-bootstrap",
+				baseUrl: "http://127.0.0.1:8080/v1",
+			},
+			plan: {
+				source: { kind: "huggingface-hub", input: "Qwen/Qwen3.6-35B-A3B" },
+				download: { required: true, controllableByCli: false },
+				placement: {
+					status: "accepted",
+					enforcement: "runtime-default-cache",
+					allowExternalStorage: false,
+					likelyExternal: false,
+				},
+				warnings: [],
+			},
+			actions: [{ kind: "managed-process-started", description: "Started managed vllm-mlx process." }],
+			hints: [],
+		})
+
+		const output = await captureStdout(() =>
+			useRuntime(
+				undefined,
+				{ model: "Qwen/Qwen3.6-35B-A3B" },
+				{
+					isOpsControlPlaneAvailable,
+					activateManagedRuntime,
+					saveSettings,
+				},
+			),
+		)
+
+		expect(activateManagedRuntime).toHaveBeenCalled()
+		expect(output).toContain("Model: Qwen/Qwen3.6-35B-A3B")
 	})
 
 	it("supports configuration-only llama.cpp profiles", async () => {

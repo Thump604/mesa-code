@@ -1,9 +1,9 @@
 import {
 	activateOpsPreset,
 	buildOpsControlPlaneSettingsPatch,
-	getOpsModeContract,
 	isOpsControlPlaneAvailable,
 	listOpsModelPresets,
+	pollOpsReadiness,
 	resolveOpsBaseUrl,
 	type OpsModelPreset,
 } from "@/lib/ops-control-plane.js"
@@ -54,9 +54,9 @@ type UseRuntimeDeps = {
 	activateManagedRuntime?: typeof activateManagedRuntime
 	activateOpsPreset?: typeof activateOpsPreset
 	buildModelUsePlan?: typeof buildModelUsePlan
-	getOpsModeContract?: typeof getOpsModeContract
 	isOpsControlPlaneAvailable?: typeof isOpsControlPlaneAvailable
 	listOpsModelPresets?: typeof listOpsModelPresets
+	pollOpsReadiness?: typeof pollOpsReadiness
 	saveSettings?: typeof saveSettings
 }
 
@@ -195,6 +195,13 @@ function resolveModelTarget(targetArg: string | undefined, options: UseOptions):
 	return options.model ?? targetArg
 }
 
+function looksLikePresetAlias(target: string): boolean {
+	if (target.includes("/")) return false
+	if (/^[A-Za-z]:/.test(target)) return false
+	if (target.endsWith(".gguf")) return false
+	return true
+}
+
 export async function useRuntime(
 	targetArg: string | undefined,
 	options: UseOptions,
@@ -229,6 +236,18 @@ export async function useRuntime(
 		throw new Error("Use requires a preset alias, --model, or a saved model for the selected local runtime.")
 	}
 
+	if (targetArg && !options.model && !options.preset && !requestedPreset && looksLikePresetAlias(targetArg)) {
+		if (!opsAvailable) {
+			throw new Error(
+				"Ops control plane is required to resolve preset aliases. " +
+					"Use --model <HF repo or local path> for direct runtime bootstrap.",
+			)
+		}
+		throw new Error(
+			`"${targetArg}" is not a known preset. ` + "Use --model <HF repo or local path> for direct model targets.",
+		)
+	}
+
 	if (requestedPreset && !opsAvailable) {
 		throw new Error(
 			`The ops control plane is required to activate preset ${requestedPreset.id}. Start ops at ${opsBaseUrl} or use --model for direct runtime bootstrap.`,
@@ -237,33 +256,50 @@ export async function useRuntime(
 
 	if (requestedPreset) {
 		const activatedPreset = await (deps.activateOpsPreset ?? activateOpsPreset)(opsBaseUrl, requestedPreset.id)
-		const modeContract = await (deps.getOpsModeContract ?? getOpsModeContract)(opsBaseUrl)
-		const activeModel = modeContract.active_model_id ?? activatedPreset.model_id ?? requestedPreset.model_id ?? ""
+
+		const waitSeconds = parseWaitSeconds(options.waitSeconds)
+		const readiness = await (deps.pollOpsReadiness ?? pollOpsReadiness)(opsBaseUrl, {
+			presetId: requestedPreset.id,
+			expectedModelId: requestedPreset.model_id ?? undefined,
+			waitSeconds,
+		})
+
+		const isReady =
+			readiness.ready &&
+			readiness.preset.active === requestedPreset.id &&
+			(!requestedPreset.model_id || readiness.preset.model_id === requestedPreset.model_id)
+
+		const activeModel = readiness.preset.model_id ?? activatedPreset.model_id ?? requestedPreset.model_id ?? ""
+
+		const hints: string[] = []
+		if (!isReady && readiness.reason) {
+			hints.push(`Runtime is not ready: ${readiness.reason}`)
+		}
+
 		const result: RuntimeUseResult = {
 			runtime,
 			protocol,
 			provider,
 			baseUrl,
 			model: activeModel,
-			state: "starting",
+			state: isReady ? "ready" : "starting",
 			controlPlane: {
 				kind: "ops",
 				baseUrl: opsBaseUrl,
 			},
 			activePreset: {
-				id: modeContract.active_preset ?? requestedPreset.id,
-				displayName:
-					modeContract.active_preset_display_name ?? requestedPreset.display_name ?? requestedPreset.id,
+				id: readiness.preset.active ?? requestedPreset.id,
+				displayName: readiness.preset.display_name ?? requestedPreset.display_name ?? requestedPreset.id,
 			},
 			actions: [
 				{
-					kind: "settings-selected",
-					description: `Activated preset ${requestedPreset.id} through the ops control plane.`,
+					kind: isReady ? "verification-ready" : "verification-pending",
+					description: isReady
+						? `Preset ${requestedPreset.id} is active and the runtime is ready.`
+						: `Activated preset ${requestedPreset.id}; runtime is not yet ready.`,
 				},
 			],
-			hints: [
-				"Ops/runtime does not expose authoritative model-ready state yet; treat this as a preset activation request until /ready and structured operation state land.",
-			],
+			hints,
 		}
 
 		await (deps.saveSettings ?? saveSettings)(
