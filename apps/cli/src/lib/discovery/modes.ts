@@ -22,16 +22,22 @@ async function readModeFile(filePath: string, source: "global" | "project"): Pro
 }
 
 export async function loadCliModes(workspacePath: string): Promise<ModeConfig[]> {
-	const globalModesPath = path.join(os.homedir(), ".roo", "custom_modes.yaml")
+	const globalModesPath = path.join(os.homedir(), ".mesa", "custom_modes.yaml")
+	const legacyGlobalModesPath = path.join(os.homedir(), ".roo", "custom_modes.yaml")
 	const projectModesPath = path.join(workspacePath, ".roomodes")
 
-	const [globalModes, projectModes] = await Promise.all([
+	const [globalModes, legacyGlobalModes, projectModes] = await Promise.all([
 		readModeFile(globalModesPath, "global"),
+		readModeFile(legacyGlobalModesPath, "global"),
 		readModeFile(projectModesPath, "project"),
 	])
 
+	// Merge global modes: ~/.mesa wins over ~/.roo for same slug
+	const mesaSlugs = new Set(globalModes.map((m) => m.slug))
+	const mergedGlobalModes = [...globalModes, ...legacyGlobalModes.filter((m) => !mesaSlugs.has(m.slug))]
+
 	const projectModeSlugs = new Set(projectModes.map((mode) => mode.slug))
-	const mergedCustomModes = [...projectModes, ...globalModes.filter((mode) => !projectModeSlugs.has(mode.slug))]
+	const mergedCustomModes = [...projectModes, ...mergedGlobalModes.filter((mode) => !projectModeSlugs.has(mode.slug))]
 	const allModes = [...DEFAULT_MODES]
 
 	for (const customMode of mergedCustomModes) {

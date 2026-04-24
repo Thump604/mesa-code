@@ -191,9 +191,9 @@ function ChatHistoryItem({ message }: ChatHistoryItemProps) {
 			return (
 				<Box flexDirection="column" paddingX={1}>
 					<Text bold color="yellow">
-						Roo said:
+						Mesa said:
 					</Text>
-					<Text color={theme.rooText}>
+					<Text color={theme.mesaText}>
 						{content}
 						<Newline />
 					</Text>

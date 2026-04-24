@@ -131,12 +131,24 @@ export async function getCliCommands(workspacePath: string): Promise<CliCommand[
 		commands.set(command.name, command)
 	}
 
-	const globalCommands = await scanCommandDirectory(path.join(os.homedir(), ".roo", "commands"), "global")
+	// Legacy ~/.roo/commands first, then ~/.mesa/commands (mesa wins on conflict)
+	const legacyGlobalCommands = await scanCommandDirectory(path.join(os.homedir(), ".roo", "commands"), "global")
+	for (const command of legacyGlobalCommands) {
+		commands.set(command.name, command)
+	}
+
+	const globalCommands = await scanCommandDirectory(path.join(os.homedir(), ".mesa", "commands"), "global")
 	for (const command of globalCommands) {
 		commands.set(command.name, command)
 	}
 
-	const projectCommands = await scanCommandDirectory(path.join(workspacePath, ".roo", "commands"), "project")
+	// Legacy .roo/commands first, then .mesa/commands (mesa wins on conflict)
+	const legacyProjectCommands = await scanCommandDirectory(path.join(workspacePath, ".roo", "commands"), "project")
+	for (const command of legacyProjectCommands) {
+		commands.set(command.name, command)
+	}
+
+	const projectCommands = await scanCommandDirectory(path.join(workspacePath, ".mesa", "commands"), "project")
 	for (const command of projectCommands) {
 		commands.set(command.name, command)
 	}

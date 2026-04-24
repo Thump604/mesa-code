@@ -2,6 +2,7 @@ import * as fs from "fs/promises"
 import * as path from "path"
 
 import { getHistoryFilePath, loadHistory, saveHistory, addToHistory, MAX_HISTORY_ENTRIES } from "../history.js"
+import { _resetConfigDirForTesting } from "../config-dir.js"
 
 vi.mock("fs/promises")
 
@@ -20,12 +21,13 @@ vi.mock("os", async (importOriginal) => {
 describe("historyStorage", () => {
 	beforeEach(() => {
 		vi.resetAllMocks()
+		_resetConfigDirForTesting()
 	})
 
 	describe("getHistoryFilePath", () => {
 		it("should return the correct path to cli-history.json", () => {
 			const result = getHistoryFilePath()
-			expect(result).toBe(path.join("/home/testuser", ".roo", "cli-history.json"))
+			expect(result).toBe(path.join("/home/testuser", ".mesa", "cli-history.json"))
 		})
 	})
 
@@ -91,12 +93,13 @@ describe("historyStorage", () => {
 
 	describe("saveHistory", () => {
 		it("should create directory and save history", async () => {
+			vi.mocked(fs.access).mockRejectedValue(Object.assign(new Error("ENOENT"), { code: "ENOENT" }))
 			vi.mocked(fs.mkdir).mockResolvedValue(undefined)
 			vi.mocked(fs.writeFile).mockResolvedValue(undefined)
 
 			await saveHistory(["command1", "command2"])
 
-			expect(fs.mkdir).toHaveBeenCalledWith(path.join("/home/testuser", ".roo"), { recursive: true })
+			expect(fs.mkdir).toHaveBeenCalledWith(path.join("/home/testuser", ".mesa"), { recursive: true })
 			expect(fs.writeFile).toHaveBeenCalled()
 
 			// Verify the content written

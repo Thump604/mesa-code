@@ -47,13 +47,13 @@ export const tipsText = hardcore.subtext0 // Subtle text for tips
 
 // Header text colors (for messages)
 export const userHeader = hardcore.purple // Purple for user header
-export const rooHeader = hardcore.yellow // Yellow for roo
+export const mesaHeader = hardcore.yellow // Yellow for agent
 export const toolHeader = hardcore.cyan // Cyan for tool headers
 export const thinkingHeader = hardcore.overlay1 // Subtle gray for thinking header
 
 // Message text colors
 export const userText = hardcore.text // Standard text for user
-export const rooText = hardcore.text // Standard text for roo
+export const mesaText = hardcore.text // Standard text for agent
 export const toolText = hardcore.subtext0 // Subtle text for tool output
 export const thinkingText = hardcore.overlay2 // Subtle gray for thinking text
 

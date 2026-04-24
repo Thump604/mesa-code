@@ -18,7 +18,7 @@ export type SearchWorkspaceFilesOptions = {
 	query: string
 	limit?: number
 	maxIndexedFiles?: number
-	showRooIgnoredFiles?: boolean
+	showIgnoredFiles?: boolean
 }
 
 type FileSearchCacheEntry = {
@@ -29,7 +29,7 @@ type FileSearchCacheEntry = {
 
 export type FileSearchDeps = {
 	loadWorkspaceIndex: (workspacePath: string, maxIndexedFiles: number) => Promise<FileSearchResult[]>
-	loadRooIgnorePatterns: (workspacePath: string) => Promise<string | null>
+	loadIgnorePatterns: (workspacePath: string) => Promise<string | null>
 	realpathSync: (filePath: string) => string
 	now: () => number
 }
@@ -41,7 +41,7 @@ const WORKSPACE_INDEX_CACHE = new Map<string, FileSearchCacheEntry>()
 
 const defaultDeps: FileSearchDeps = {
 	loadWorkspaceIndex: loadWorkspaceIndex,
-	loadRooIgnorePatterns: loadRooIgnorePatterns,
+	loadIgnorePatterns: loadIgnorePatterns,
 	realpathSync: (filePath) => fs.realpathSync.native(filePath),
 	now: () => Date.now(),
 }
@@ -94,19 +94,22 @@ async function getCachedWorkspaceIndex(
 	return pending
 }
 
-async function loadRooIgnorePatterns(workspacePath: string): Promise<string | null> {
-	const rooIgnorePath = path.join(workspacePath, ".rooignore")
+async function loadIgnorePatterns(workspacePath: string): Promise<string | null> {
+	// Prefer .mesaignore; fall back to .rooignore for migration
+	for (const filename of [".mesaignore", ".rooignore"]) {
+		try {
+			return await fs.promises.readFile(path.join(workspacePath, filename), "utf8")
+		} catch (error) {
+			const normalized = error as NodeJS.ErrnoException
+			if (normalized.code === "ENOENT") {
+				continue
+			}
 
-	try {
-		return await fs.promises.readFile(rooIgnorePath, "utf8")
-	} catch (error) {
-		const normalized = error as NodeJS.ErrnoException
-		if (normalized.code === "ENOENT") {
-			return null
+			throw error
 		}
-
-		throw error
 	}
+
+	return null
 }
 
 async function loadWorkspaceIndex(workspacePath: string, maxIndexedFiles: number): Promise<FileSearchResult[]> {
@@ -193,18 +196,19 @@ async function loadWorkspaceIndex(workspacePath: string, maxIndexedFiles: number
 	})
 }
 
-function createRooIgnoreMatcher(patterns: string | null): Ignore | null {
+function createIgnoreMatcher(patterns: string | null): Ignore | null {
 	if (!patterns?.trim()) {
 		return null
 	}
 
 	const matcher = ignore()
 	matcher.add(patterns)
+	matcher.add(".mesaignore")
 	matcher.add(".rooignore")
 	return matcher
 }
 
-function isAllowedByRooIgnore(
+function isAllowedByIgnoreRules(
 	resultPath: string,
 	workspacePath: string,
 	matcher: Ignore | null,
@@ -240,18 +244,18 @@ export async function searchWorkspaceFiles(
 		query,
 		limit = DEFAULT_FILE_SEARCH_LIMIT,
 		maxIndexedFiles = DEFAULT_MAX_INDEXED_FILES,
-		showRooIgnoredFiles = false,
+		showIgnoredFiles = false,
 	}: SearchWorkspaceFilesOptions,
 	deps: Partial<FileSearchDeps> = {},
 ): Promise<FileSearchResult[]> {
 	const resolvedDeps = { ...defaultDeps, ...deps }
 	const indexedEntries = await getCachedWorkspaceIndex(workspacePath, maxIndexedFiles, resolvedDeps)
 
-	const rooIgnorePatterns = showRooIgnoredFiles ? null : await resolvedDeps.loadRooIgnorePatterns(workspacePath)
-	const rooIgnoreMatcher = createRooIgnoreMatcher(rooIgnorePatterns)
+	const ignorePatterns = showIgnoredFiles ? null : await resolvedDeps.loadIgnorePatterns(workspacePath)
+	const ignoreMatcher = createIgnoreMatcher(ignorePatterns)
 
 	const visibleEntries = indexedEntries.filter((entry) =>
-		isAllowedByRooIgnore(entry.path, workspacePath, rooIgnoreMatcher, resolvedDeps),
+		isAllowedByIgnoreRules(entry.path, workspacePath, ignoreMatcher, resolvedDeps),
 	)
 
 	if (!query.trim()) {

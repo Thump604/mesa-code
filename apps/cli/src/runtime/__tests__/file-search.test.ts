@@ -7,7 +7,7 @@ describe("searchWorkspaceFiles", () => {
 		clearWorkspaceFileSearchCache()
 	})
 
-	it("filters .rooignore results by default", async () => {
+	it("filters ignored files by default (.mesaignore/.rooignore)", async () => {
 		const loadWorkspaceIndex = vi.fn().mockResolvedValue([
 			{ path: "src/index.ts", type: "file", label: "index.ts" },
 			{ path: "src", type: "folder", label: "src" },
@@ -21,7 +21,7 @@ describe("searchWorkspaceFiles", () => {
 			},
 			{
 				loadWorkspaceIndex,
-				loadRooIgnorePatterns: vi.fn().mockResolvedValue("secrets/\n"),
+				loadIgnorePatterns: vi.fn().mockResolvedValue("secrets/\n"),
 				realpathSync: vi.fn((filePath: string) => filePath),
 				now: vi.fn().mockReturnValue(0),
 			},
@@ -33,29 +33,29 @@ describe("searchWorkspaceFiles", () => {
 		])
 	})
 
-	it("can show .rooignore results when requested", async () => {
+	it("can show ignored results when requested", async () => {
 		const loadWorkspaceIndex = vi.fn().mockResolvedValue([
 			{ path: "src/index.ts", type: "file", label: "index.ts" },
 			{ path: "secrets/token.txt", type: "file", label: "token.txt" },
 		] satisfies FileSearchResult[])
 
-		const loadRooIgnorePatterns = vi.fn().mockResolvedValue("secrets/\n")
+		const loadIgnorePatterns = vi.fn().mockResolvedValue("secrets/\n")
 
 		const results = await searchWorkspaceFiles(
 			{
 				workspacePath: "/workspace",
 				query: "",
-				showRooIgnoredFiles: true,
+				showIgnoredFiles: true,
 			},
 			{
 				loadWorkspaceIndex,
-				loadRooIgnorePatterns,
+				loadIgnorePatterns,
 				realpathSync: vi.fn((filePath: string) => filePath),
 				now: vi.fn().mockReturnValue(0),
 			},
 		)
 
-		expect(loadRooIgnorePatterns).not.toHaveBeenCalled()
+		expect(loadIgnorePatterns).not.toHaveBeenCalled()
 		expect(results).toEqual([
 			{ path: "src/index.ts", type: "file", label: "index.ts" },
 			{ path: "secrets/token.txt", type: "file", label: "token.txt" },
@@ -75,7 +75,7 @@ describe("searchWorkspaceFiles", () => {
 			},
 			{
 				loadWorkspaceIndex,
-				loadRooIgnorePatterns: vi.fn().mockResolvedValue(null),
+				loadIgnorePatterns: vi.fn().mockResolvedValue(null),
 				realpathSync: vi.fn((filePath: string) => filePath),
 				now,
 			},
@@ -88,7 +88,7 @@ describe("searchWorkspaceFiles", () => {
 			},
 			{
 				loadWorkspaceIndex,
-				loadRooIgnorePatterns: vi.fn().mockResolvedValue(null),
+				loadIgnorePatterns: vi.fn().mockResolvedValue(null),
 				realpathSync: vi.fn((filePath: string) => filePath),
 				now,
 			},

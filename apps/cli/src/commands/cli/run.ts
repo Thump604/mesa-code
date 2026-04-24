@@ -137,7 +137,7 @@ export async function run(promptArg: string | undefined, flagOptions: FlagOption
 
 	if (isResumeRequested && prompt) {
 		console.error("[CLI] Error: cannot use prompt or --prompt-file with --session-id/--continue")
-		console.error("[CLI] Usage: roo [--session-id <session-id> | --continue] [options]")
+		console.error("[CLI] Usage: mesa [--session-id <session-id> | --continue] [options]")
 		process.exit(1)
 	}
 
@@ -354,39 +354,39 @@ export async function run(promptArg: string | undefined, flagOptions: FlagOption
 	// Output format only works with --print mode
 	if (outputFormat !== "text" && !flagOptions.print && isTuiSupported) {
 		console.error("[CLI] Error: --output-format requires --print mode")
-		console.error("[CLI] Usage: roo --print --output-format json")
+		console.error("[CLI] Usage: mesa --print --output-format json")
 		process.exit(1)
 	}
 
 	if (flagOptions.stdinPromptStream && !flagOptions.print) {
 		console.error("[CLI] Error: --stdin-prompt-stream requires --print mode")
-		console.error("[CLI] Usage: roo --print --output-format stream-json --stdin-prompt-stream [options]")
+		console.error("[CLI] Usage: mesa --print --output-format stream-json --stdin-prompt-stream [options]")
 		process.exit(1)
 	}
 
 	if (flagOptions.signalOnlyExit && !flagOptions.stdinPromptStream) {
 		console.error("[CLI] Error: --signal-only-exit requires --stdin-prompt-stream")
-		console.error("[CLI] Usage: roo --print --output-format stream-json --stdin-prompt-stream --signal-only-exit")
+		console.error("[CLI] Usage: mesa --print --output-format stream-json --stdin-prompt-stream --signal-only-exit")
 		process.exit(1)
 	}
 
 	if (flagOptions.stdinPromptStream && outputFormat !== "stream-json") {
 		console.error("[CLI] Error: --stdin-prompt-stream requires --output-format=stream-json")
-		console.error("[CLI] Usage: roo --print --output-format stream-json --stdin-prompt-stream [options]")
+		console.error("[CLI] Usage: mesa --print --output-format stream-json --stdin-prompt-stream [options]")
 		process.exit(1)
 	}
 
 	if (flagOptions.stdinPromptStream && process.stdin.isTTY) {
 		console.error("[CLI] Error: --stdin-prompt-stream requires piped stdin")
 		console.error(
-			'[CLI] Example: printf \'{"command":"start","requestId":"1","prompt":"1+1=?"}\\n\' | roo --print --output-format stream-json --stdin-prompt-stream [options]',
+			'[CLI] Example: printf \'{"command":"start","requestId":"1","prompt":"1+1=?"}\\n\' | mesa --print --output-format stream-json --stdin-prompt-stream [options]',
 		)
 		process.exit(1)
 	}
 
 	if (flagOptions.stdinPromptStream && prompt) {
 		console.error("[CLI] Error: cannot use positional prompt or --prompt-file with --stdin-prompt-stream")
-		console.error("[CLI] Usage: roo --print --output-format stream-json --stdin-prompt-stream [options]")
+		console.error("[CLI] Usage: mesa --print --output-format stream-json --stdin-prompt-stream [options]")
 		process.exit(1)
 	}
 
@@ -401,13 +401,13 @@ export async function run(promptArg: string | undefined, flagOptions: FlagOption
 		if (!prompt && !useStdinPromptStream && !isResumeRequested) {
 			if (flagOptions.print) {
 				console.error("[CLI] Error: no prompt provided")
-				console.error("[CLI] Usage: roo --print [options] <prompt>")
+				console.error("[CLI] Usage: mesa --print [options] <prompt>")
 				console.error(
-					"[CLI] For stdin control mode: roo --print --output-format stream-json --stdin-prompt-stream [options]",
+					"[CLI] For stdin control mode: mesa --print --output-format stream-json --stdin-prompt-stream [options]",
 				)
 			} else {
 				console.error("[CLI] Error: prompt is required in non-interactive mode")
-				console.error("[CLI] Usage: roo <prompt> [options]")
+				console.error("[CLI] Usage: mesa <prompt> [options]")
 				console.error("[CLI] Run without -p for interactive mode")
 			}
 

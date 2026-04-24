@@ -16,9 +16,9 @@ import {
 const program = new Command()
 
 program
-	.name("roo")
+	.name("mesa")
 	.description(
-		"Roo Code CLI - local/private-first agent, interactive by default; use -p/--print for non-interactive output",
+		"Mesa Code CLI - local-first coding agent for self-hosted AI runtimes; use -p/--print for non-interactive output",
 	)
 	.version(VERSION)
 	.enablePositionalOptions()
@@ -137,7 +137,7 @@ applyListOptions(listCommand.command("sessions").description("List task sessions
 
 program
 	.command("upgrade")
-	.description("Upgrade Roo Code CLI to the latest version")
+	.description("Upgrade Mesa Code CLI to the latest version")
 	.action(async () => {
 		await runUpgradeAction(() => upgrade())
 	})

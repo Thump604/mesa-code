@@ -3,8 +3,8 @@ import { spawn } from "child_process"
 import { VERSION } from "@/lib/utils/version.js"
 import { isRecord } from "@/lib/utils/guards.js"
 
-const INSTALL_REPO = process.env.ROO_REPO || "Thump604/Roo-Code"
-const INSTALL_BRANCH = process.env.ROO_INSTALL_BRANCH || "main"
+const INSTALL_REPO = process.env.MESA_REPO || process.env.ROO_REPO || "Thump604/Roo-Code"
+const INSTALL_BRANCH = process.env.MESA_INSTALL_BRANCH || process.env.ROO_INSTALL_BRANCH || "main"
 const RELEASES_URL = `https://api.github.com/repos/${INSTALL_REPO}/releases?per_page=100`
 export const INSTALL_SCRIPT_COMMAND = `curl -fsSL https://raw.githubusercontent.com/${INSTALL_REPO}/${INSTALL_BRANCH}/apps/cli/install.sh | sh`
 
@@ -70,7 +70,7 @@ export async function getLatestCliVersion(fetchImpl: typeof fetch = fetch): Prom
 	const response = await fetchImpl(RELEASES_URL, {
 		headers: {
 			Accept: "application/vnd.github+json",
-			"User-Agent": "roo-cli",
+			"User-Agent": "mesa-cli",
 		},
 	})
 
@@ -142,11 +142,11 @@ export async function upgrade(options: UpgradeOptions = {}): Promise<void> {
 	console.log(`Latest version: ${latestVersion}`)
 
 	if (compareVersions(latestVersion, currentVersion) <= 0) {
-		console.log("Roo CLI is already up to date.")
+		console.log("Mesa CLI is already up to date.")
 		return
 	}
 
-	console.log(`Upgrading Roo CLI from ${currentVersion} to ${latestVersion}...`)
+	console.log(`Upgrading Mesa CLI from ${currentVersion} to ${latestVersion}...`)
 	if (runInstaller) {
 		await runInstaller()
 	} else {
