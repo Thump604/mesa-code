@@ -17,6 +17,7 @@ mock/
 .claude/
 .cursor/
 .windsurf/
+.mesa/
 .roo/
 AGENTS.md
 CLAUDE.md
@@ -82,4 +83,5 @@ qdrant_storage/
 # Architect plans
 plans/
 
+mesa-cli-*.tar.gz*
 roo-cli-*.tar.gz*
