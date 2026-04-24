@@ -1,18 +1,23 @@
-# Roo Code Local CLI Fork
+# Mesa Code
 
-This is an early public fork of Roo Code focused on one narrow goal:
-building a strong local/private-first coding CLI.
+Mesa Code is an early public fork of Roo Code focused on one narrow goal:
+building a terminal-native coding agent that treats local AI runtimes as
+first-class systems, not just endpoint URLs.
 
-The project direction is intentionally different from maintaining the full
-upstream VS Code extension surface. The priority is a terminal-native agent
-that works well with local and self-hosted model runtimes, keeps private work
-local by default, and exposes predictable command-line behavior for both humans
-and automation.
+The project is being shaped for developers who run local or self-hosted models
+and want the agent to know what is actually running: which model was requested,
+which model is active, whether it is ready, which runtime features are
+qualified, and how tool approvals behave across CLI, TUI, and automation
+surfaces.
 
 ## Status
 
 This fork is in active development and is not packaged as a stable release yet.
 The public roadmap is a draft and will change as the CLI architecture settles.
+
+The product name is **Mesa Code**. The repository still contains forked Roo Code
+package names and compatibility paths while the rename is staged. The intended
+CLI command is `mesa`; `roo` will remain a compatibility alias during migration.
 
 See [ROADMAP.md](ROADMAP.md) for the current public plan.
 
@@ -22,6 +27,7 @@ See [ROADMAP.md](ROADMAP.md) for the current public plan.
 - local/self-hosted runtimes first
 - no required cloud account in the happy path
 - OpenAI-compatible and Anthropic-compatible local endpoint support
+- runtime readiness and model identity checks before claiming success
 - first-class support for local runtime observability
 - stable text, JSON, and stream contracts for automation
 - explicit user control over tools, approvals, model selection, and config
@@ -29,7 +35,7 @@ See [ROADMAP.md](ROADMAP.md) for the current public plan.
 
 ## Local Runtime Goals
 
-The fork is being shaped around local model engines such as:
+Mesa Code is being shaped around local model engines such as:
 
 - `vllm-mlx`
 - `llama.cpp`
@@ -39,6 +45,22 @@ The fork is being shaped around local model engines such as:
 The CLI should not hide local runtime complexity behind fake green buttons. If
 a runtime feature is not qualified, the CLI should say so clearly and fail
 closed.
+
+## Why Not Just Another Coding CLI?
+
+Pi is impressively light. OpenCode and Kilo Code are strong agent CLIs. Mesa
+Code is aimed at a different gap: the local runtime/operator layer.
+
+The goal is for the CLI to understand:
+
+- what model was requested
+- what model is actually serving
+- whether the requested model is ready
+- whether runtime features are qualified for that model
+- what the runtime health and queue state look like
+- whether approval behavior is consistent across TUI, CLI, and stream modes
+
+That makes local inference easier to trust and easier to automate.
 
 ## Development
 

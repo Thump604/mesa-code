@@ -1,7 +1,7 @@
-# Public Roadmap Draft
+# Mesa Code Public Roadmap Draft
 
-This roadmap is a public draft for the local/private-first Roo Code CLI fork.
-It is intentionally high level. Internal operator notes, private runtime
+Mesa Code is a local-first coding agent CLI/TUI forked from Roo Code. This
+roadmap is intentionally high level. Internal operator notes, private runtime
 qualification details, and machine-specific control-plane plans do not belong
 in this repository.
 
@@ -58,7 +58,17 @@ Keep local/private behavior as the default product posture.
 - clear approval controls for tools and shell commands
 - private configuration stored locally
 
-## 6. Migration From Roo Code
+## 6. Mesa Code Rename And Migration
+
+Move from the Roo Code fork identity to Mesa Code without breaking early users.
+
+- keep upstream Roo attribution clear
+- retain a `roo` compatibility alias during migration
+- add the `mesa` CLI command
+- rename public package and install docs in stages
+- avoid unnecessary internal namespace churn until the CLI surface is stable
+
+## 7. Migration From Roo Code
 
 Preserve useful migration paths without staying trapped in the old product
 shape.
